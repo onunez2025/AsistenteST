@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reporte de Desempeño Crítico - Técnicos SB2</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #2563eb;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --success: #10b981;
+            --dark: #1e293b;
+            --light: #f8fafc;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; }
+        body { background-color: #f1f5f9; color: var(--dark); line-height: 1.6; padding: 2rem; }
+        .container { max-width: 1300px; margin: 0 auto; }
+
+        header {
+            background: linear-gradient(135deg, var(--dark) 0%, #334155 100%);
+            color: white;
+            padding: 3rem;
+            border-radius: 1.5rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+        }
+
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 1.5rem; margin-bottom: 2rem; }
+        .card { background: white; padding: 2rem; border-radius: 1rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+        .stat { font-size: 2.5rem; font-weight: 700; }
+        .danger { color: var(--danger); }
+
+        .tech-section { background: white; border-radius: 1.5rem; margin-bottom: 3rem; overflow: hidden; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); border-top: 8px solid var(--danger); }
+        .tech-header { padding: 2rem; background: #fff1f2; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #fee2e2; }
+        .tech-body { padding: 2.5rem; display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
+        
+        .analysis-box { background: #f8fafc; padding: 1.5rem; border-radius: 1rem; border-left: 5px solid var(--primary); }
+        .evidence-box { background: #fff7ed; padding: 1.5rem; border-radius: 1rem; border-left: 5px solid var(--warning); }
+        
+        .ticket-tag { background: #e2e8f0; padding: 2px 8px; border-radius: 4px; font-family: monospace; font-size: 0.85rem; font-weight: 600; }
+        
+        .pattern-list { list-style: none; margin-top: 1rem; }
+        .pattern-list li { margin-bottom: 0.8rem; padding-left: 1.5rem; position: relative; }
+        .pattern-list li::before { content: "→"; position: absolute; left: 0; color: var(--danger); font-weight: bold; }
+
+        .quote-box { font-style: italic; color: #475569; border-top: 1px solid #e2e8f0; margin-top: 1rem; padding-top: 1rem; font-size: 0.9rem; }
+
+        @media (max-width: 900px) { .tech-body { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1>Análisis Forense de Desempeño Crítico</h1>
+        <p>Reporte Detallado de Técnicos SB2 - Auditoría Marzo 2026</p>
+    </header>
+
+    <div class="grid">
+        <div class="card">
+            <h3>Tasa de Fallo Artificial</h3>
+            <p class="stat danger">41%</p>
+            <p>Servicios rechazados por "No Acondicionado" o "Ausente" bajo criterios subjetivos.</p>
+        </div>
+        <div class="card">
+            <h3>Impacto en NPS</h3>
+            <p class="stat danger">8.6 / 10</p>
+            <p>Puntuación por debajo del SLA corporativo de 9.5.</p>
+        </div>
+    </div>
+
+    <!-- VILI VERGEL -->
+    <div class="tech-section" style="border-top-color: #ef4444;">
+        <div class="tech-header">
+            <div>
+                <h2>VILI VERGEL VIA VERGARAY</h2>
+                <span class="ticket-tag">Código: VIAVILI041228</span>
+            </div>
+            <div style="text-align: right;">
+                <p>NPS: <strong>8.57</strong></p>
+                <p>Reprogramaciones: <strong>124</strong></p>
+            </div>
+        </div>
+        <div class="tech-body">
+            <div class="analysis-box">
+                <h3>Patrones Operativos Identificados</h3>
+                <ul class="pattern-list">
+                    <li><strong>Sobrecostos de Movilidad:</strong> Cobro recurrente de S/30 a S/40 por "movilidad" no autorizada en servicios gratuitos.</li>
+                    <li><strong>Venta Forzada en Sitio:</strong> Clientes reportan presión para comprar accesorios a precios elevados (Ticket 1177651).</li>
+                    <li><strong>Abandono por Horario:</strong> Prioriza su salida del distrito sobre la conclusión del servicio.</li>
+                </ul>
+            </div>
+            <div class="evidence-box">
+                <h3>Evidencias Directas (Marzo 2026)</h3>
+                <p><strong>NPS Comentario (Puntaje 0):</strong> "Me cobró 230 soles por una instalación que debía ser gratuita. Dijo que era por movilidad y materiales extras."</p>
+                <div class="quote-box">
+                    <strong>Script de rechazo habitual:</strong> "Área no acondicionada por falta de ventilación, cliente moroso, no desea pagar visita."
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ABRAHAN APAGUENO -->
+    <div class="tech-section" style="border-top-color: #f59e0b;">
+        <div class="tech-header">
+            <div>
+                <h2>ABRAHAN APAGUENO CUMAPA</h2>
+                <span class="ticket-tag">Código: Abram.ap.88</span>
+            </div>
+            <div style="text-align: right;">
+                <p>NPS: <strong>8.67</strong></p>
+                <p>Visitas Fallidas: <strong>132</strong></p>
+            </div>
+        </div>
+        <div class="tech-body">
+            <div class="analysis-box">
+                <h3>Patrones Operativos Identificados</h3>
+                <ul class="pattern-list">
+                    <li><strong>El "Script de los 15 Minutos":</strong> Automatización del rechazo. Identificado en más de 15 tickets (ej. <span class="ticket-tag">1169187</span>) donde menciona: <em>"espere mis 15 minutos reglamentarios y me retiré"</em>.</li>
+                    <li><strong>Confusión Técnica Irreal:</strong> Reporta que el cliente no cuenta con "aire acondicionado" para instalar una terma (Ticket <span class="ticket-tag">1160724</span>, <span class="ticket-tag">1175802</span>).</li>
+                    <li><strong>Falta de Cuidado:</strong> Quejas por rayado de pisos y rotura de accesorios del cliente durante el proceso.</li>
+                </ul>
+            </div>
+            <div class="evidence-box">
+                <h3>Evidencias Directas (Marzo 2026)</h3>
+                <p><strong>NPS Comentario (Puntaje 0):</strong> "El técnico rayó el piso de mi sala y se fue antes de terminar porque dijo que era su hora de almuerzo y me pidió 20 soles."</p>
+                <div class="quote-box">
+                    <strong>Script habitual:</strong> "Se espero 15 min reglamentarios y me retiré... no tiene aire acondicionado." 
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- JOSE LUIS ENCISO -->
+    <div class="tech-section" style="border-top-color: #3b82f6;">
+        <div class="tech-header">
+            <div>
+                <h2>JOSE LUIS ENCISO CERON</h2>
+                <span class="ticket-tag">Código: joseluisenciso72981</span>
+            </div>
+            <div style="text-align: right;">
+                <p>NPS: <strong>9.07</strong></p>
+                <p>Fallas por "No Acondicionado": <strong>47</strong></p>
+            </div>
+        </div>
+        <div class="tech-body">
+            <div class="analysis-box">
+                <h3>Patrones Operativos Identificados</h3>
+                <ul class="pattern-list">
+                    <li><strong>Sesgo anti-Parket/Melamina:</strong> Rechaza instalaciones sistemáticamente si el piso es de madera (Ticket <span class="ticket-tag">993</span>, <span class="ticket-tag">1395</span>), alegando "mantenimiento imposible".</li>
+                    <li><strong>Uso peyorativo de "Moroso":</strong> Clasifica como "Cliente Moroso" a cualquier usuario que cuestiona el cobro de verificación sin trabajo realizado (Ticket <span class="ticket-tag">1389</span>, <span class="ticket-tag">1305</span>).</li>
+                    <li><strong>Rigidez de Instalación:</strong> Frase favorita "Si o Si". Exige obras civiles al cliente antes de siquiera desempacar el producto.</li>
+                </ul>
+            </div>
+            <div class="evidence-box">
+                <h3>Evidencias Directas (Marzo 2026)</h3>
+                <p><strong>Comentario Técnico (Ticket 993):</strong> "No se puede instalar... todo el piso es PARKET no hay donde botar el agua. CLIENTE MOROSO no quiso pagar la verificación."</p>
+                <div class="quote-box">
+                    <strong>Script de rechazo habitual:</strong> "Instalación pendiente ya que tiene que comprar 2 tubos adicional si o si."
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- CANTS -->
+     <div style="background: white; padding: 2rem; border-radius: 1rem; margin-bottom: 2rem;">
+        <h2>Comparativa de Efectividad Real</h2>
+        <canvas id="detailChart" height="100"></canvas>
+     </div>
+
+    <div style="background: #fee2e2; padding: 2rem; border-radius: 1rem; border: 2px solid var(--danger);">
+        <h2 style="color: var(--danger);">Acciones Recomendadas Inmediatas</h2>
+        <ul style="margin-top: 1rem; margin-left: 1.5rem;">
+            <li><strong>Auditoría de Fondos:</strong> Recuperar los cobros realizados por Vergel por "movilidad" no declarada.</li>
+            <li><strong>Cese por Desidia:</strong> Evaluación de contrato para Apagueño por abandono recurrente de servicios bajo el script de los 15 minutos.</li>
+            <li><strong>Estandarización Técnica:</strong> Prohibir el rechazo de servicios por tipo de piso (Parket) si existen medidas de protección estándar.</li>
+        </ul>
+    </div>
+</div>
+
+<script>
+    const ctx = document.getElementById('detailChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: ['Vili Vergel', 'Abrahan Apagueño', 'Jose Luis Enciso'],
+            datasets: [{
+                label: 'Exitosos',
+                data: [192, 181, 200],
+                backgroundColor: '#10b981'
+            }, {
+                label: 'Excusas Técnicas',
+                data: [144, 132, 130],
+                backgroundColor: '#ef4444'
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: { y: { beginAtZero: true } }
+        }
+    });
+</script>
+
+</body>
+</html>

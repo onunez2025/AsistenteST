@@ -1,0 +1,41 @@
+# Environment variables
+.env
+.env.*
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Generated Reports & Charts (Backend Static)
+backend/static/reports/*
+backend/static/charts/*
+!backend/static/reports/.gitkeep
+!backend/static/charts/.gitkeep
+
+# Node (Frontend)
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+frontend/*.local
+
+# Logs
+*.log
+log_errores.txt
+log_pdf_parsing.txt
+
+# Editor / IDE Configs
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.gemini/

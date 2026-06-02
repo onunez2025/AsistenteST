@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reporte de Desempeño Crítico - Técnicos SB2</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #2563eb;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --success: #10b981;
+            --dark: #1e293b;
+            --light: #f8fafc;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Inter', sans-serif;
+        }
+
+        body {
+            background-color: #f1f5f9;
+            color: var(--dark);
+            line-height: 1.6;
+            padding: 2rem;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            background: linear-gradient(135deg, var(--dark) 0%, #334155 100%);
+            color: white;
+            padding: 3rem;
+            border-radius: 1.5rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+        }
+
+        header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .card {
+            background: white;
+            padding: 2rem;
+            border-radius: 1rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .card h3 {
+            font-size: 1.1rem;
+            color: #64748b;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat {
+            font-size: 2.5rem;
+            font-weight: 700;
+        }
+
+        .stat.danger { color: var(--danger); }
+        .stat.warning { color: var(--warning); }
+
+        .chart-container {
+            background: white;
+            padding: 2.5rem;
+            border-radius: 1.5rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .tech-profiles {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 2rem;
+        }
+
+        .tech-card {
+            background: white;
+            border-radius: 1.5rem;
+            display: flex;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            border-left: 12px solid var(--danger);
+        }
+
+        .tech-info {
+            padding: 2.5rem;
+            flex: 1;
+        }
+
+        .tech-name {
+            font-size: 1.6rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+
+        .badge {
+            background: #fee2e2;
+            color: var(--danger);
+            padding: 0.3rem 1rem;
+            border-radius: 999px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin-left: 0.5rem;
+        }
+
+        .complaints-list {
+            list-style: none;
+            margin-top: 1.5rem;
+        }
+
+        .complaints-list li {
+            padding: 1rem;
+            background: #fff1f2;
+            border-left: 5px solid var(--danger);
+            margin-bottom: 0.8rem;
+            border-radius: 0 0.8rem 0.8rem 0;
+            font-size: 0.95rem;
+        }
+
+        .recommendations {
+            background: #ecfdf5;
+            padding: 3rem;
+            border-radius: 1.5rem;
+            border: 2px solid var(--success);
+            margin-top: 3rem;
+        }
+
+        .recommendations h2 {
+            color: #065f46;
+            margin-bottom: 1.5rem;
+        }
+
+        .recommendations li {
+            margin-bottom: 1rem;
+        }
+
+        @media (max-width: 768px) {
+            .tech-card { flex-direction: column; border-left: none; border-top: 12px solid var(--danger); }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1>Reporte de Desempeño Crítico</h1>
+        <p>Análisis de Técnicos con Problemas Operativos - Marzo 2026</p>
+    </header>
+
+    <div class="grid">
+        <div class="card">
+            <h3>Punto Crítico en Reprogramación</h3>
+            <p class="stat danger">40.7%</p>
+            <p>137 servicios fallidos en 336 visitas (Vili Vergel)</p>
+        </div>
+        <div class="card">
+            <h3>Promedio NPS General</h3>
+            <p class="stat warning">8.60</p>
+            <p>Técnicos bajo el estándar óptimo de 9.50</p>
+        </div>
+        <div class="card">
+            <h3>Quejas por Sobrecostos</h3>
+            <p class="stat danger">Alta Incidencia</p>
+            <p>Reportes de cobros ilegales de movilidad</p>
+        </div>
+    </div>
+
+    <div class="chart-container">
+        <h2>Comparativa de Efectividad (Éxito vs Fracaso/Reprogramación)</h2>
+        <div style="height: 400px;">
+            <canvas id="performanceChart"></canvas>
+        </div>
+    </div>
+
+    <div class="tech-profiles">
+        <!-- VILI VERGEL -->
+        <div class="tech-card" style="border-left-color: #ef4444;">
+            <div class="tech-info">
+                <div class="tech-name">VILI VERGEL VIA VERGARAY <span class="badge">NPS CRÍTICO</span></div>
+                <div style="display: flex; gap: 20px; font-weight: 600; color: #64748b; margin-bottom: 1rem;">
+                    <span>Total Visitas: 336</span>
+                    <span>Éxito: 57%</span>
+                    <span>NPS Avg: 8.57</span>
+                </div>
+                <ul class="complaints-list">
+                    <li><strong>Cobros No Autorizados:</strong> Clientes reportan cobros directos de hasta S/230 por servicios gratuitos.</li>
+                    <li><strong>Sobrecosto de Movilidad:</strong> Cobro recurrente de "movilidad" no informado previamente.</li>
+                    <li><strong>Rigidez Técnica:</strong> Alta tasa de "Área no acondicionada" para justificar reprogramaciones constantes.</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- ABRAHAN APAGUENO -->
+        <div class="tech-card" style="border-left-color: #f59e0b;">
+            <div class="tech-info">
+                <div class="tech-name">ABRAHAN APAGUENO CUMAPA <span class="badge" style="background: #fef3c7; color: #d97706;">CALIDAD DEFICIENTE</span></div>
+                <div style="display: flex; gap: 20px; font-weight: 600; color: #64748b; margin-bottom: 1rem;">
+                    <span>Total Visitas: 313</span>
+                    <span>Éxito: 58%</span>
+                    <span>NPS Avg: 8.67</span>
+                </div>
+                <ul class="complaints-list">
+                    <li><strong>Daño a Propiedad:</strong> Cliente reporta pisado rayado durante instalación (Ticket 883690).</li>
+                    <li><strong>Abandono de Servicio:</strong> Se retiró en horario de almuerzo tras exigir cobro de S/20 sin concluir.</li>
+                    <li><strong>Garantía Técnica:</strong> Fallo post-instalación inmediato en termas instaladas.</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- JOSE LUIS ENCISO -->
+        <div class="tech-card" style="border-left-color: #3b82f6;">
+            <div class="tech-info">
+                <div class="tech-name">JOSE LUIS ENCISO CERON <span class="badge" style="background: #dbeafe; color: #1d4ed8;">OPERATIVO</span></div>
+                <div style="display: flex; gap: 20px; font-weight: 600; color: #64748b; margin-bottom: 1rem;">
+                    <span>Total Visitas: 330</span>
+                    <span>Éxito: 60%</span>
+                    <span>NPS Avg: 9.07</span>
+                </div>
+                <ul class="complaints-list">
+                    <li><strong>Ineficiencia Operativa:</strong> Muy alta incidencia de área no acondicionada (47 casos).</li>
+                    <li><strong>Atención Deficiente:</strong> "No me dan una solución" es la queja recurrente de los clientes.</li>
+                    <li><strong>Falta de Empoderamiento:</strong> Cliente termina instalando el producto por su cuenta tras su visita.</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <div class="recommendations">
+        <h2>Recomendaciones Estratégicas para Gerencia</h2>
+        <ul>
+            <li><strong>Auditoría de Pagos en Campo:</strong> Investigar los cobros realizados por Vili Vergel.</li>
+            <li><strong>Protocolo de Cuidado del Hogar:</strong> Sesión de re-entrenamiento para Abrahan Apagueño sobre el uso de alfombras protectoras.</li>
+            <li><strong>Filtro de Despacho Preventivo:</strong> Validación previa por fotos del cliente para reducir el 20% de visitas fallidas por "área no acondicionada".</li>
+            <li><strong>Revisión de Conducta:</strong> Prohibir el abandono de servicios iniciados sin previo aviso pactado con el cliente.</li>
+        </ul>
+    </div>
+</div>
+
+<script>
+    const ctx = document.getElementById('performanceChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: ['Vili Vergel', 'Abrahan Apagueño', 'Jose Luis Enciso'],
+            datasets: [{
+                label: 'Visitas Exitosas',
+                data: [192, 181, 200],
+                backgroundColor: '#10b981',
+                borderRadius: 8
+            }, {
+                label: 'Visitas Fallidas / Reprogramadas',
+                data: [144, 132, 130],
+                backgroundColor: '#ef4444',
+                borderRadius: 8
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'top' },
+                tooltip: { backgroundColor: '#1e293b' }
+            },
+            scales: { 
+                y: { beginAtZero: true, grid: { color: '#e2e8f0' } },
+                x: { grid: { display: false } }
+            }
+        }
+    });
+</script>
+
+</body>
+</html>
