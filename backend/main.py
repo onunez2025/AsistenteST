@@ -28,10 +28,15 @@ elif os.path.exists("../.env"):
 else:
     load_dotenv()
 
+# Debug: Log present environment keys (safely, without printing their secret values)
+present_keys = [k for k in os.environ.keys() if k.startswith(("SQL_", "SAP_", "GEMINI_"))]
+logger.info(f"Variables de entorno detectadas al inicio: {present_keys}")
+
 # Gemini Config
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
+    logger.info("Gemini API Key cargada correctamente.")
 else:
     logger.warning("GEMINI_API_KEY not found in environment variables. Gemini calls will fail.")
 
