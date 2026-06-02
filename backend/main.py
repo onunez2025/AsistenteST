@@ -344,7 +344,8 @@ async def chat_endpoint(request: ChatRequest):
             "4. Cuando te pidan gráficos, estadísticas comparativas o tendencias visuales, usa 'generar_grafico'.\n"
             "5. Si te preguntan por un ID de ticket específico, puedes consultar en tiempo real con 'obtener_ticket_c4c_tiempo_real'.\n"
             "6. Si la consulta SQL requiere filtros de fecha, recuerda que la base de datos almacena fechas. Asegúrate de formatear el rango de fechas en SQL (ej. YYYY-MM-DD).\n"
-            "7. Escribe respuestas bien estructuradas con tablas en Markdown si es pertinente."
+            "7. Escribe respuestas bien estructuradas con tablas en Markdown si es pertinente.\n"
+            "8. IMPORTANTE: Para evitar exceder la cuota (Error 429 Rate Limit) de la API de Gemini, sé sumamente eficiente con las llamadas a herramientas. Intenta resolver la pregunta del usuario con UNA SOLA consulta SQL consolidada en lugar de realizar múltiples llamadas consecutivas en una sola respuesta."
         )
         
         # Enviamos la instrucción inicial del sistema
