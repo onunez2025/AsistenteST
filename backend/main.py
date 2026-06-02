@@ -34,6 +34,8 @@ logger.info(f"Variables de entorno detectadas al inicio: {present_keys}")
 
 # Gemini Config
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+logger.info(f"GEMINI_API_KEY debug - type: {type(GEMINI_API_KEY)}, length: {len(GEMINI_API_KEY) if GEMINI_API_KEY else 0}, repr: {repr(GEMINI_API_KEY)}")
+
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
     logger.info("Gemini API Key cargada correctamente.")
