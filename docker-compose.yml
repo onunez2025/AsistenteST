@@ -4,14 +4,14 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     environment:
-      - SQL_SERVER
-      - SQL_DATABASE
-      - SQL_USER
-      - SQL_PASSWORD
-      - SAP_BASE_URL
-      - SAP_USER
-      - SAP_PASSWORD
-      - GEMINI_API_KEY
+      SQL_SERVER: ${SQL_SERVER}
+      SQL_DATABASE: ${SQL_DATABASE}
+      SQL_USER: ${SQL_USER}
+      SQL_PASSWORD: ${SQL_PASSWORD}
+      SAP_BASE_URL: ${SAP_BASE_URL}
+      SAP_USER: ${SAP_USER}
+      SAP_PASSWORD: ${SAP_PASSWORD}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
     volumes:
       - backend-static:/app/static
     restart: always
