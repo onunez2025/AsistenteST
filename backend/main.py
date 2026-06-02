@@ -325,7 +325,7 @@ async def chat_endpoint(request: ChatRequest):
     try:
         # Inicializar el modelo con todas las herramientas registradas
         model = genai.GenerativeModel(
-            model_name="gemini-1.5-flash",
+            model_name="gemini-3.5-flash",
             tools=[ejecutar_consulta_sql, obtener_ticket_c4c_tiempo_real, generar_reporte_excel, generar_grafico]
         )
         
