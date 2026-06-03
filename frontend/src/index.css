@@ -4,5 +4,5 @@ html, body, #root {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background-color: #090a0f;
+  background-color: var(--bg-primary);
 }

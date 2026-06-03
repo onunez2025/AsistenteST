@@ -16,6 +16,42 @@
   --shadow-sm: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
   --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
   --shadow-glow: 0 0 20px rgba(6, 182, 212, 0.15);
+  --app-bg-gradient: radial-gradient(circle at 50% 0%, #111827 0%, var(--bg-primary) 70%);
+  --chat-header-bg: rgba(9, 10, 15, 0.4);
+  --suggested-btn-bg: rgba(255, 255, 255, 0.03);
+  --suggested-btn-hover: rgba(6, 182, 212, 0.08);
+  --input-wrapper-bg: rgba(255, 255, 255, 0.03);
+  --input-container-fade: rgba(9, 10, 15, 0);
+  --scrollbar-thumb: rgba(255, 255, 255, 0.1);
+  --table-header-bg: rgba(255, 255, 255, 0.03);
+  --avatar-assistant-bg: rgba(255, 255, 255, 0.05);
+}
+
+:root[data-theme='light'] {
+  --bg-primary: #f8fafc;
+  --bg-sidebar: rgba(241, 245, 249, 0.85);
+  --bg-card: rgba(255, 255, 255, 0.85);
+  --border-color: rgba(15, 23, 42, 0.08);
+  --border-focus: rgba(6, 182, 212, 0.6);
+  --text-main: #0f172a;
+  --text-muted: #475569;
+  --accent-cyan: #0891b2;
+  --accent-indigo: #4f46e5;
+  --accent-gradient: linear-gradient(135deg, #0891b2 0%, #4f46e5 100%);
+  --chat-user-bg: linear-gradient(135deg, #0891b2 0%, #4f46e5 100%);
+  --chat-assistant-bg: rgba(255, 255, 255, 0.95);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.03);
+  --shadow-lg: 0 10px 15px -3px rgba(15, 23, 42, 0.05), 0 4px 6px -2px rgba(15, 23, 42, 0.02);
+  --shadow-glow: 0 0 20px rgba(6, 182, 212, 0.08);
+  --app-bg-gradient: radial-gradient(circle at 50% 0%, #e0f2fe 0%, var(--bg-primary) 70%);
+  --chat-header-bg: rgba(248, 250, 252, 0.65);
+  --suggested-btn-bg: rgba(255, 255, 255, 0.95);
+  --suggested-btn-hover: rgba(6, 182, 212, 0.05);
+  --input-wrapper-bg: rgba(255, 255, 255, 0.95);
+  --input-container-fade: rgba(248, 250, 252, 0);
+  --scrollbar-thumb: rgba(15, 23, 42, 0.15);
+  --table-header-bg: rgba(15, 23, 42, 0.03);
+  --avatar-assistant-bg: rgba(15, 23, 42, 0.04);
 }
 
 * {
@@ -40,8 +76,9 @@ h1, h2, h3, .brand-title {
   display: flex;
   height: 100vh;
   width: 100vw;
-  background: radial-gradient(circle at 50% 0%, #111827 0%, var(--bg-primary) 70%);
+  background: var(--app-bg-gradient);
   overflow: hidden;
+  transition: background 0.3s ease;
 }
 
 /* Sidebar Styling */
@@ -52,7 +89,7 @@ h1, h2, h3, .brand-title {
   backdrop-filter: blur(16px);
   display: flex;
   flex-direction: column;
-  transition: transform 0.3s ease;
+  transition: transform 0.3s ease, background 0.3s ease, border-color 0.3s ease;
   z-index: 10;
 }
 
@@ -127,7 +164,7 @@ h1, h2, h3, .brand-title {
 }
 
 .suggested-btn {
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--suggested-btn-bg);
   border: 1px solid var(--border-color);
   padding: 12px 16px;
   border-radius: 12px;
@@ -136,11 +173,11 @@ h1, h2, h3, .brand-title {
   font-size: 13px;
   line-height: 1.4;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.2s ease, background 0.3s ease, border-color 0.3s ease, color 0.3s ease;
 }
 
 .suggested-btn:hover {
-  background: rgba(6, 182, 212, 0.08);
+  background: var(--suggested-btn-hover);
   border-color: var(--accent-cyan);
   transform: translateY(-2px);
 }
@@ -186,9 +223,10 @@ h1, h2, h3, .brand-title {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: rgba(9, 10, 15, 0.4);
+  background: var(--chat-header-bg);
   backdrop-filter: blur(8px);
   z-index: 5;
+  transition: background 0.3s ease, border-color 0.3s ease;
 }
 
 .menu-toggle {
@@ -238,8 +276,9 @@ h1, h2, h3, .brand-title {
 
 .messages-container::-webkit-scrollbar-thumb,
 .sidebar-content::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--scrollbar-thumb);
   border-radius: 10px;
+  transition: background 0.3s ease;
 }
 
 .messages-container::-webkit-scrollbar-thumb:hover,
@@ -283,9 +322,10 @@ h1, h2, h3, .brand-title {
 }
 
 .message.assistant .avatar {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--avatar-assistant-bg);
   border: 1px solid var(--border-color);
   color: var(--accent-cyan);
+  transition: background 0.3s ease, border-color 0.3s ease, color 0.3s ease;
 }
 
 .message-content {
@@ -303,6 +343,8 @@ h1, h2, h3, .brand-title {
   background: var(--chat-user-bg);
   border: 1px solid rgba(255, 255, 255, 0.05);
   border-bottom-right-radius: 4px;
+  color: #ffffff;
+  transition: background 0.3s ease, border-color 0.3s ease;
 }
 
 .message.assistant .message-content {
@@ -336,7 +378,8 @@ h1, h2, h3, .brand-title {
 .download-title {
   font-weight: 600;
   font-size: 13px;
-  color: #fff;
+  color: var(--text-main);
+  transition: color 0.3s ease;
 }
 
 .download-size {
@@ -456,9 +499,10 @@ h1, h2, h3, .brand-title {
 }
 
 .message-content th {
-  background-color: rgba(255, 255, 255, 0.03);
+  background-color: var(--table-header-bg);
   font-weight: 600;
-  color: #fff;
+  color: var(--text-main);
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 .message-content tr:hover {
@@ -515,13 +559,14 @@ h1, h2, h3, .brand-title {
 /* Input Container */
 .input-container {
   padding: 24px 32px 32px 32px;
-  background: linear-gradient(180deg, rgba(9, 10, 15, 0) 0%, var(--bg-primary) 50%);
+  background: linear-gradient(180deg, var(--input-container-fade) 0%, var(--bg-primary) 50%);
   border-top: 1px solid var(--border-color);
   backdrop-filter: blur(4px);
+  transition: background 0.3s ease, border-color 0.3s ease;
 }
 
 .input-wrapper {
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--input-wrapper-bg);
   border: 1px solid var(--border-color);
   border-radius: 16px;
   padding: 8px 8px 8px 16px;
@@ -590,6 +635,33 @@ h1, h2, h3, .brand-title {
 @keyframes bounce {
   0%, 80%, 100% { transform: scale(0); }
   40% { transform: scale(1.0); }
+}
+
+/* Theme Toggle Button */
+.theme-toggle-btn {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-color);
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-main);
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: var(--shadow-sm);
+}
+
+.theme-toggle-btn:hover {
+  background: var(--suggested-btn-hover);
+  border-color: var(--accent-cyan);
+  color: var(--accent-cyan);
+  transform: rotate(15deg) scale(1.05);
+}
+
+.theme-toggle-btn:active {
+  transform: scale(0.95);
 }
 
 /* Responsive Rules (Mobile-First) */
