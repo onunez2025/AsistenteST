@@ -160,7 +160,39 @@ function App() {
       }
       
       const data = await response.json();
-      setMessages(prev => [...prev, { role: 'assistant', content: data.content }]);
+      const taskId = data.task_id;
+      
+      // Función recursiva para consultar el estado de la tarea en segundo plano
+      const pollStatus = async () => {
+        try {
+          const statusResp = await fetch(`${API_BASE_URL}/api/chat/status/${taskId}`);
+          if (!statusResp.ok) {
+            throw new Error('No se pudo verificar el estado de la consulta.');
+          }
+          
+          const taskData = await statusResp.json();
+          
+          if (taskData.status === 'completed') {
+            setMessages(prev => [...prev, { role: 'assistant', content: taskData.result.content }]);
+            setIsLoading(false);
+          } else if (taskData.status === 'failed') {
+            throw new Error(taskData.error || 'Error en el procesamiento de la consulta.');
+          } else {
+            // Sigue procesando, volver a consultar en 2 segundos
+            setTimeout(pollStatus, 2000);
+          }
+        } catch (pollError) {
+          console.error('Error durante el sondeo del chat:', pollError);
+          setMessages(prev => [...prev, { 
+            role: 'assistant', 
+            content: `Lo siento, ocurrió un error al procesar tu solicitud: ${pollError.message}` 
+          }]);
+          setIsLoading(false);
+        }
+      };
+      
+      // Iniciar el sondeo después de 2 segundos
+      setTimeout(pollStatus, 2000);
       
     } catch (error) {
       console.error('Error enviando mensaje:', error);
@@ -168,7 +200,6 @@ function App() {
         role: 'assistant', 
         content: 'Lo siento, ocurrió un error al procesar tu solicitud. Por favor verifica la conexión con el servidor backend.' 
       }]);
-    } finally {
       setIsLoading(false);
     }
   };

@@ -7,7 +7,8 @@ import pandas as pd
 import pyodbc
 import requests
 from requests.auth import HTTPBasicAuth
-from fastapi import FastAPI, HTTPException, Depends
+import uuid
+from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -305,10 +306,7 @@ def generar_grafico(sql_query: str, tipo_grafico: str, columna_x: str, columna_y
         
     except Exception as e:
         logger.error(f"Error generando gráfico: {e}")
-        return f"Error al generar el gráfico: {str(e)}"
-
-
-# --- CHAT ENDPOINT ---
+        return f"Error al generar el gráfic# --- CHAT ENDPOINT (ASINCRONO) ---
 
 class ChatMessage(BaseModel):
     role: str  # 'user' or 'assistant'
@@ -317,17 +315,28 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     messages: List[ChatMessage]
 
-@app.post("/api/chat")
-async def chat_endpoint(request: ChatRequest):
-    if not GEMINI_API_KEY:
-        raise HTTPException(status_code=500, detail="Gemini API Key no configurada en el backend.")
-        
+# Base de datos de tareas temporal en memoria
+active_tasks: Dict[str, Dict[str, Any]] = {}
+
+def run_gemini_chat_task(task_id: str, history_messages: List[ChatMessage], latest_message: str):
+    """Ejecuta la consulta con Gemini en segundo plano para evitar timeouts del proxy."""
     try:
-        # Obtener fecha y hora actual del servidor backend
+        logger.info(f"[TASK] Iniciando procesamiento para la tarea {task_id}")
+        
+        # Limpieza de tareas antiguas (mayores a 15 minutos)
+        now = datetime.now()
+        keys_to_delete = [
+            k for k, v in active_tasks.items() 
+            if "created_at" in v and (now - v["created_at"]).total_seconds() > 900
+        ]
+        for k in keys_to_delete:
+            active_tasks.pop(k, None)
+            logger.info(f"[TASK] Tarea antigua {k} removida de memoria.")
+
+        # Obtener fecha y hora actual para el prompt
         fecha_actual = datetime.now().strftime("%Y-%m-%d")
         hora_actual = datetime.now().strftime("%H:%M:%S")
         
-        # Configurar el contexto del sistema
         prompt_sistema = (
             "Eres Israel Alejandro (IA), el Asistente de Servicio Técnico de MT Industrial. "
             "Tu misión es ayudar al Gerente y Jefaturas de Atención al Cliente a consultar "
@@ -408,21 +417,15 @@ async def chat_endpoint(request: ChatRequest):
             "8. Escribe respuestas bien estructuradas con tablas en Markdown si es pertinente."
         )
 
-        # Inicializar el modelo con la instrucción del sistema y las herramientas registradas
         model = genai.GenerativeModel(
             model_name="gemini-3.5-flash",
             system_instruction=prompt_sistema,
             tools=[ejecutar_consulta_sql, obtener_ticket_c4c_tiempo_real, generar_reporte_excel, generar_grafico]
         )
         
-        # Reconstruir el historial para Gemini
-        # El historial debe comenzar estrictamente con un rol 'user' y alternar con 'model'.
-        # Filtramos los mensajes iniciales del asistente (como el saludo de bienvenida)
-        # para que la conversación enviada a Gemini comience correctamente con un mensaje del usuario.
         historial_gemini = []
-        for msg in request.messages[:-1]:
+        for msg in history_messages:
             role = "user" if msg.role == "user" else "model"
-            # Si el historial está vacío en el backend de Gemini, solo puede empezar con 'user'
             if not historial_gemini and role == "model":
                 continue
             historial_gemini.append(
@@ -432,24 +435,65 @@ async def chat_endpoint(request: ChatRequest):
                 )
             )
             
-        # Iniciar chat de Gemini pasándole el historial reconstruido
         chat = model.start_chat(
             history=historial_gemini,
             enable_automatic_function_calling=True
         )
         
-        ultimo_mensaje = request.messages[-1].content
-        response = chat.send_message(ultimo_mensaje)
+        response = chat.send_message(latest_message)
         
-        # Extraer respuesta final de Gemini
+        active_tasks[task_id] = {
+            "status": "completed",
+            "result": {
+                "role": "assistant",
+                "content": response.text
+            },
+            "created_at": now
+        }
+        logger.info(f"[TASK] Tarea {task_id} completada exitosamente.")
+    except Exception as e:
+        logger.error(f"Error procesando chat con Gemini en tarea {task_id}: {e}", exc_info=True)
+        active_tasks[task_id] = {
+            "status": "failed",
+            "error": str(e),
+            "created_at": datetime.now()
+        }
+
+@app.post("/api/chat")
+async def chat_endpoint(request: ChatRequest, background_tasks: BackgroundTasks):
+    if not GEMINI_API_KEY:
+        raise HTTPException(status_code=500, detail="Gemini API Key no configurada en el backend.")
+        
+    try:
+        task_id = str(uuid.uuid4())
+        active_tasks[task_id] = {
+            "status": "processing",
+            "created_at": datetime.now()
+        }
+        
+        # Iniciar ejecución asíncrona usando BackgroundTasks de FastAPI
+        background_tasks.add_task(
+            run_gemini_chat_task,
+            task_id,
+            request.messages[:-1],
+            request.messages[-1].content
+        )
+        
         return {
-            "role": "assistant",
-            "content": response.text
+            "task_id": task_id,
+            "status": "processing"
         }
         
     except Exception as e:
-        logger.error(f"Error procesando chat con Gemini: {e}")
+        logger.error(f"Error al iniciar tarea de chat: {e}")
         raise HTTPException(status_code=500, detail=f"Error al procesar la solicitud: {str(e)}")
+
+@app.get("/api/chat/status/{task_id}")
+async def get_task_status(task_id: str):
+    task_data = active_tasks.get(task_id)
+    if not task_data:
+        raise HTTPException(status_code=404, detail="Tarea no encontrada o expirada.")
+    return task_data
 
 
 @app.get("/")
