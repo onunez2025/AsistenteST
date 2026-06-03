@@ -306,7 +306,9 @@ def generar_grafico(sql_query: str, tipo_grafico: str, columna_x: str, columna_y
         
     except Exception as e:
         logger.error(f"Error generando gráfico: {e}")
-        return f"Error al generar el gráfic# --- CHAT ENDPOINT (ASINCRONO) ---
+        return f"Error al generar el gráfico: {str(e)}"
+
+# --- CHAT ENDPOINT (ASINCRONO) ---
 
 class ChatMessage(BaseModel):
     role: str  # 'user' or 'assistant'
