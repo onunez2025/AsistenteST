@@ -430,12 +430,10 @@ def run_gemini_chat_task(task_id: str, history_messages: List[ChatMessage], late
             role = "user" if msg.role == "user" else "model"
             if not historial_gemini and role == "model":
                 continue
-            historial_gemini.append(
-                genai.types.Content(
-                    role=role,
-                    parts=[genai.types.Part.from_text(text=msg.content)]
-                )
-            )
+            historial_gemini.append({
+                "role": role,
+                "parts": [msg.content]
+            })
             
         chat = model.start_chat(
             history=historial_gemini,
