@@ -115,7 +115,7 @@ function App() {
   const [messages, setMessages] = useState([
     {
       role: 'assistant',
-      content: '¡Hola! Soy tu **Asistente de Servicio Técnico (Chatbot ST)**.\n\n¿En qué puedo ayudarte hoy? Puedes hacerme preguntas sobre tickets en C4C, resúmenes operativos, rendimiento de técnicos o solicitar reportes en Excel y gráficos.'
+      content: '¡Hola! Soy **Israel Alejandro (IA)**, tu Asistente de Servicio Técnico.\n\n¿En qué puedo ayudarte hoy? Puedes hacerme preguntas sobre tickets en C4C, resúmenes operativos, rendimiento de técnicos o solicitar reportes en Excel y gráficos.'
     }
   ]);
   const [inputText, setInputText] = useState('');
@@ -322,10 +322,10 @@ function App() {
       <div className={`sidebar ${isSidebarOpen ? 'open' : ''}`}>
         <div className="sidebar-header">
           <div className="logo-container">
-            <div className="logo-text">ST</div>
+            <div className="logo-text">IA</div>
           </div>
           <div className="brand-info">
-            <span className="brand-title">Asistente ST</span>
+            <span className="brand-title">Israel Alejandro</span>
             <span className="brand-subtitle">Atención al Cliente</span>
           </div>
           <button 
