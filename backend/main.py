@@ -35,10 +35,9 @@ logger.info(f"Variables de entorno detectadas al inicio: {present_keys}")
 
 # DeepSeek Config
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
-logger.info(f"DEEPSEEK_API_KEY debug - type: {type(DEEPSEEK_API_KEY)}, length: {len(DEEPSEEK_API_KEY) if DEEPSEEK_API_KEY else 0}")
-
 if DEEPSEEK_API_KEY:
-    logger.info("DeepSeek API Key cargada correctamente.")
+    DEEPSEEK_API_KEY = DEEPSEEK_API_KEY.strip().strip('"').strip("'")
+    logger.info("DeepSeek API Key cargada y limpiada correctamente.")
 else:
     logger.warning("DEEPSEEK_API_KEY no encontrada en las variables de entorno. Las consultas a DeepSeek fallarán.")
 
