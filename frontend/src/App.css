@@ -363,7 +363,6 @@ h1, h2, h3, .brand-title {
 }
 
 .chart-iframe-container {
-  margin-top: 14px;
   width: 100%;
   border-radius: 12px;
   overflow: hidden;
@@ -377,6 +376,51 @@ h1, h2, h3, .brand-title {
   height: 400px;
   border: none;
   display: block;
+}
+
+/* Links and chart wrapper styling */
+.chat-link {
+  color: var(--accent-cyan);
+  text-decoration: underline;
+  font-weight: 500;
+  transition: color 0.2s ease;
+}
+
+.chat-link:hover {
+  color: #22d3ee;
+}
+
+.chart-container-wrapper {
+  margin-top: 14px;
+  width: 100%;
+}
+
+.chart-header-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+
+.chart-indicator {
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.chart-open-link {
+  color: var(--accent-cyan);
+  text-decoration: none;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: color 0.2s ease;
+}
+
+.chart-open-link:hover {
+  color: #22d3ee;
+  text-decoration: underline;
 }
 
 /* Tables in Markdown */

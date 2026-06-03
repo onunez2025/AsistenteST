@@ -26,6 +26,10 @@ const UserIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
 );
 
+// Base URL for API
+// Direct to backend (assuming backend runs on same host or port 8000)
+const API_BASE_URL = window.location.hostname === 'localhost' ? 'http://localhost:8000' : '';
+
 // Simple Markdown parser utility to support basic formatting: tables, lists, links, bold
 const parseMarkdown = (text) => {
   if (!text) return '';
@@ -45,6 +49,12 @@ const parseMarkdown = (text) => {
   
   // Headers (H3)
   html = html.replace(/^\s*###\s+(.*)$/gm, '<h3>$1</h3>');
+  
+  // Links: [Text](URL)
+  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (match, linkText, url) => {
+    const fullUrl = url.startsWith('/') ? `${API_BASE_URL}${url}` : url;
+    return `<a href="${fullUrl}" target="_blank" rel="noopener noreferrer" class="chat-link">${linkText}</a>`;
+  });
   
   // Tables
   // Checks if the block contains vertical bars
@@ -100,10 +110,6 @@ const parseMarkdown = (text) => {
   
   return html;
 };
-
-// Base URL for API
-// Direct to backend (assuming backend runs on same host or port 8000)
-const API_BASE_URL = window.location.hostname === 'localhost' ? 'http://localhost:8000' : '';
 
 function App() {
   const [messages, setMessages] = useState([
@@ -180,26 +186,38 @@ function App() {
 
   // Helper to extract custom tokens for downloads and charts
   const renderMessageContent = (content) => {
-    // 1. Check for interactive Plotly charts: [EmbedChart:url]
-    const embedChartRegex = /\[EmbedChart:([^\]]+)\]/g;
-    const matchChart = embedChartRegex.exec(content);
+    // 1. Check for interactive Plotly charts: [EmbedChart:url] or standard markdown link pointing to charts
+    const embedChartRegex = /\[EmbedChart:([^\]]+)\]/i;
+    const mdChartRegex = /\[[^\]]+\]\((\/static\/charts\/[^)]+\.html)\)/i;
     
-    // 2. Check for Excel downloads: [Descargar Reporte Excel](url)
-    const excelDownloadRegex = /\[Descargar Reporte Excel\]\(([^)]+)\)/g;
-    const matchExcel = excelDownloadRegex.exec(content);
+    // 2. Check for Excel downloads: [Descargar Reporte Excel](url) or standard markdown link pointing to reports
+    const excelDownloadRegex = /\[Descargar Reporte Excel\]\(([^)]+)\)/i;
+    const mdExcelRegex = /\[[^\]]+\]\((\/static\/reports\/[^)]+\.xlsx)\)/i;
     
-    let cleanedContent = content;
     let chartUrl = null;
     let excelUrl = null;
     
+    const matchChart = embedChartRegex.exec(content) || mdChartRegex.exec(content);
     if (matchChart) {
       chartUrl = matchChart[1];
-      cleanedContent = cleanedContent.replace(embedChartRegex, '');
     }
     
+    const matchExcel = excelDownloadRegex.exec(content) || mdExcelRegex.exec(content);
     if (matchExcel) {
       excelUrl = matchExcel[1];
-      cleanedContent = cleanedContent.replace(excelDownloadRegex, '');
+    }
+    
+    // Clean tokens and links from displayed content so they don't show as ugly raw text or duplicate embeds
+    let cleanedContent = content;
+    if (chartUrl) {
+      cleanedContent = cleanedContent
+        .replace(/\[EmbedChart:[^\]]+\]/gi, '')
+        .replace(/\[[^\]]+\]\(\/static\/charts\/[^)]+\.html\)/gi, '');
+    }
+    if (excelUrl) {
+      cleanedContent = cleanedContent
+        .replace(/\[Descargar Reporte Excel\]\([^)]+\)/gi, '')
+        .replace(/\[[^\]]+\]\(\/static\/reports\/[^)]+\.xlsx\)/gi, '');
     }
     
     const parsedHtml = parseMarkdown(cleanedContent.trim());
@@ -229,12 +247,25 @@ function App() {
         )}
         
         {chartUrl && (
-          <div className="chart-iframe-container">
-            <iframe 
-              src={`${API_BASE_URL}${chartUrl}`} 
-              title="Gráfico ST" 
-              className="chart-iframe"
-            />
+          <div className="chart-container-wrapper">
+            <div className="chart-header-actions">
+              <span className="chart-indicator">📊 Gráfico Interactivo</span>
+              <a 
+                href={`${API_BASE_URL}${chartUrl}`} 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                className="chart-open-link"
+              >
+                Abrir en nueva pestaña ↗
+              </a>
+            </div>
+            <div className="chart-iframe-container" style={{ marginTop: '4px' }}>
+              <iframe 
+                src={`${API_BASE_URL}${chartUrl}`} 
+                title="Gráfico ST" 
+                className="chart-iframe"
+              />
+            </div>
           </div>
         )}
       </div>
