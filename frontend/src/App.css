@@ -408,19 +408,32 @@ h1, h2, h3, .brand-title {
   color: var(--text-main);
 }
 
-.chart-open-link {
-  color: var(--accent-cyan);
-  text-decoration: none;
+.chart-action-buttons {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.chart-action-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 11px;
   font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  transition: color 0.2s ease;
+  transition: all 0.2s ease;
 }
 
-.chart-open-link:hover {
+.chart-action-btn:hover {
+  background: rgba(6, 182, 212, 0.1);
+  border-color: var(--accent-cyan);
   color: #22d3ee;
-  text-decoration: underline;
 }
 
 /* Tables in Markdown */

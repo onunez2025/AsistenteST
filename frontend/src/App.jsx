@@ -184,8 +184,36 @@ function App() {
     setIsSidebarOpen(false);
   };
 
+  const handleExportPNG = (iframeId) => {
+    try {
+      const iframe = document.getElementById(iframeId);
+      if (!iframe) return;
+      
+      const iframeWindow = iframe.contentWindow;
+      const Plotly = iframeWindow.Plotly;
+      const gd = iframeWindow.document.querySelector('.plotly-graph-div');
+      
+      if (Plotly && gd) {
+        Plotly.downloadImage(gd, {
+          format: 'png',
+          filename: `grafico_st_${iframeId}`,
+          width: 1200,
+          height: 630
+        });
+      } else {
+        window.open(iframe.src, '_blank');
+      }
+    } catch (e) {
+      console.error('Error al exportar gráfico:', e);
+      const iframe = document.getElementById(iframeId);
+      if (iframe) {
+        window.open(iframe.src, '_blank');
+      }
+    }
+  };
+
   // Helper to extract custom tokens for downloads and charts
-  const renderMessageContent = (content) => {
+  const renderMessageContent = (content, index) => {
     // 1. Check for interactive Plotly charts: [EmbedChart:url] or standard markdown link pointing to charts
     const embedChartRegex = /\[EmbedChart:([^\]]+)\]/i;
     const mdChartRegex = /\[[^\]]+\]\((\/static\/charts\/[^)]+\.html)\)/i;
@@ -250,17 +278,33 @@ function App() {
           <div className="chart-container-wrapper">
             <div className="chart-header-actions">
               <span className="chart-indicator">📊 Gráfico Interactivo</span>
-              <a 
-                href={`${API_BASE_URL}${chartUrl}`} 
-                target="_blank" 
-                rel="noopener noreferrer" 
-                className="chart-open-link"
-              >
-                Abrir en nueva pestaña ↗
-              </a>
+              <div className="chart-action-buttons">
+                <a 
+                  href={`${API_BASE_URL}${chartUrl}`} 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  className="chart-action-btn"
+                >
+                  Abrir ↗
+                </a>
+                <button 
+                  onClick={() => handleExportPNG(`chart-iframe-${index}`)}
+                  className="chart-action-btn"
+                >
+                  Exportar PNG 🖼️
+                </button>
+                <a 
+                  href={`${API_BASE_URL}${chartUrl}`} 
+                  download={`grafico_st_${index}.html`}
+                  className="chart-action-btn"
+                >
+                  Descargar HTML 💾
+                </a>
+              </div>
             </div>
             <div className="chart-iframe-container" style={{ marginTop: '4px' }}>
               <iframe 
+                id={`chart-iframe-${index}`}
                 src={`${API_BASE_URL}${chartUrl}`} 
                 title="Gráfico ST" 
                 className="chart-iframe"
@@ -368,7 +412,7 @@ function App() {
                 {msg.role === 'assistant' ? <BotIcon /> : <UserIcon />}
               </div>
               <div className="message-content">
-                {msg.role === 'assistant' ? renderMessageContent(msg.content) : msg.content}
+                {msg.role === 'assistant' ? renderMessageContent(msg.content, index) : msg.content}
               </div>
             </div>
           ))}
