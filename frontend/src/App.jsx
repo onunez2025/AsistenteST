@@ -166,24 +166,70 @@ function App() {
     setTheme(prev => prev === 'dark' ? 'light' : 'dark');
   };
 
-  // State Management for Chats (localStorage)
-  const [chats, setChats] = useState(() => {
-    const saved = localStorage.getItem('chats');
-    return saved ? JSON.parse(saved) : [];
+  // Auth States
+  const [token, setToken] = useState(() => localStorage.getItem('kira_token') || null);
+  const [user, setUser] = useState(() => {
+    const saved = localStorage.getItem('kira_user');
+    return saved ? JSON.parse(saved) : null;
   });
-  
-  const [activeChatId, setActiveChatId] = useState(() => {
-    const saved = localStorage.getItem('activeChatId');
-    return saved || null;
-  });
+  const [loginUsername, setLoginUsername] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showLoginForm, setShowLoginForm] = useState(false); // false = Landing, true = Login Form
 
-  // State for Notebook notes (localStorage)
-  const [notes, setNotes] = useState(() => {
-    const saved = localStorage.getItem('notes');
-    return saved ? JSON.parse(saved) : [];
-  });
-  
+  // State Management for Chats and Notes (loaded on user change)
+  const [chats, setChats] = useState([]);
+  const [activeChatId, setActiveChatId] = useState(null);
+  const [notes, setNotes] = useState([]);
   const [activeNote, setActiveNote] = useState({ id: null, title: '', content: '' });
+
+  // Sidebar dynamic tab
+  const [sidebarTab, setSidebarTab] = useState('chats'); // 'chats' or 'library'
+
+  const username = user?.username || 'guest';
+
+  // Load from localStorage when user/username changes
+  useEffect(() => {
+    if (user) {
+      const savedChats = localStorage.getItem(`chats_${username}`);
+      setChats(savedChats ? JSON.parse(savedChats) : []);
+      
+      const savedActiveChatId = localStorage.getItem(`activeChatId_${username}`);
+      setActiveChatId(savedActiveChatId || null);
+
+      const savedNotes = localStorage.getItem(`notes_${username}`);
+      setNotes(savedNotes ? JSON.parse(savedNotes) : []);
+    } else {
+      setChats([]);
+      setActiveChatId(null);
+      setNotes([]);
+    }
+  }, [user, username]);
+
+  // Sync state changes with localStorage
+  useEffect(() => {
+    if (user) {
+      localStorage.setItem(`chats_${username}`, JSON.stringify(chats));
+    }
+  }, [chats, username, user]);
+
+  useEffect(() => {
+    if (user) {
+      if (activeChatId) {
+        localStorage.setItem(`activeChatId_${username}`, activeChatId);
+      } else {
+        localStorage.removeItem(`activeChatId_${username}`);
+      }
+    }
+  }, [activeChatId, username, user]);
+
+  useEffect(() => {
+    if (user) {
+      localStorage.setItem(`notes_${username}`, JSON.stringify(notes));
+    }
+  }, [notes, username, user]);
 
   // Chat parameters
   const [inputText, setInputText] = useState('');
@@ -198,23 +244,6 @@ function App() {
   const [fileAttachment, setFileAttachment] = useState(null); // { name, type, data }
   const fileInputRef = useRef(null);
   const messagesEndRef = useRef(null);
-
-  // Sync state changes with localStorage
-  useEffect(() => {
-    localStorage.setItem('chats', JSON.stringify(chats));
-  }, [chats]);
-
-  useEffect(() => {
-    if (activeChatId) {
-      localStorage.setItem('activeChatId', activeChatId);
-    } else {
-      localStorage.removeItem('activeChatId');
-    }
-  }, [activeChatId]);
-
-  useEffect(() => {
-    localStorage.setItem('notes', JSON.stringify(notes));
-  }, [notes]);
 
   // Scroll to bottom on new messages
   const scrollToBottom = () => {
@@ -273,30 +302,52 @@ function App() {
     }
   };
 
-  // Handle uploading files and converting to base64
-  const handleFileSelect = (e) => {
+  const [isFileUploading, setIsFileUploading] = useState(false);
+
+  // Handle uploading files directly to Azure Blob Storage
+  const handleFileSelect = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    // Limit file size to 5MB
-    if (file.size > 5 * 1024 * 1024) {
-      alert("El archivo excede el límite de tamaño de 5MB.");
+    if (file.size > 10 * 1024 * 1024) {
+      alert("El archivo excede el límite de tamaño de 10MB.");
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const base64Data = event.target.result.split(',')[1];
-      setFileAttachment({
-        name: file.name,
-        type: file.type || "application/octet-stream",
-        data: base64Data,
-        preview: file.type.startsWith('image/') ? event.target.result : null
+    setIsFileUploading(true);
+    setFileAttachment({
+      name: file.name,
+      type: file.type || "application/octet-stream",
+      url: null,
+      preview: file.type.startsWith('image/') ? URL.createObjectURL(file) : null
+    });
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/upload`, {
+        method: "POST",
+        body: formData
       });
-    };
-    reader.readAsDataURL(file);
-    // Reset file input value so the same file can be selected again
-    e.target.value = null;
+
+      if (!response.ok) {
+        throw new Error("No se pudo subir el archivo.");
+      }
+
+      const data = await response.json();
+      setFileAttachment(prev => ({
+        ...prev,
+        url: data.url
+      }));
+    } catch (err) {
+      console.error("Error al subir archivo:", err);
+      alert("Error al subir el archivo al almacenamiento en la nube.");
+      setFileAttachment(null);
+    } finally {
+      setIsFileUploading(false);
+      e.target.value = null;
+    }
   };
 
   // Send message flow
@@ -336,7 +387,7 @@ function App() {
       attachment: attachmentToSend ? {
         name: attachmentToSend.name,
         type: attachmentToSend.type,
-        data: attachmentToSend.data
+        url: attachmentToSend.url
       } : undefined
     };
 
@@ -500,33 +551,152 @@ function App() {
     setInputText(prev => prev + (prev ? '\n' : '') + content);
   };
 
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setLoginError('');
+    setIsLoggingIn(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: loginUsername, password: loginPassword })
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.detail || 'Credenciales incorrectas');
+      }
+
+      const data = await response.json();
+      localStorage.setItem('kira_token', data.token);
+      localStorage.setItem('kira_user', JSON.stringify(data.user));
+      setToken(data.token);
+      setUser(data.user);
+      
+      setLoginUsername('');
+      setLoginPassword('');
+    } catch (err) {
+      console.error('Error de login:', err);
+      setLoginError(err.message || 'Error de conexión con el servidor.');
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('kira_token');
+    localStorage.removeItem('kira_user');
+    setToken(null);
+    setUser(null);
+    setChats([]);
+    setActiveChatId(null);
+    setNotes([]);
+    handleNewNote();
+  };
+
+  const getLibraryFiles = () => {
+    const files = [];
+    chats.forEach(chat => {
+      chat.messages.forEach(msg => {
+        if (msg.attachment) {
+          files.push({
+            name: msg.attachment.name,
+            type: msg.attachment.type,
+            url: msg.attachment.url || `data:${msg.attachment.type};base64,${msg.attachment.data}`,
+            chatId: chat.id,
+            chatTitle: chat.title,
+            origin: 'uploaded',
+            date: chat.createdAt
+          });
+        }
+        
+        if (msg.role === 'assistant') {
+          const excelRegex = /\[Descargar Reporte Excel\]\(([^)]+)\)/i;
+          const mdExcelRegex = /\[[^\]]+\]\((\/(?:static\/reports|generated\/reports)\/[^)]+\.xlsx)\)/i;
+          const azureExcelRegex = /\((https:\/\/soleblob1.blob.core.windows.net\/stecnico\/generated\/reports\/[^)]+\.xlsx)\)/i;
+          
+          let excelMatch = excelRegex.exec(msg.content) || mdExcelRegex.exec(msg.content) || azureExcelRegex.exec(msg.content);
+          if (excelMatch) {
+            const url = excelMatch[1];
+            const name = url.substring(url.lastIndexOf('/') + 1);
+            files.push({
+              name: name || 'Reporte Excel',
+              type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+              url: url.startsWith('/') ? `${API_BASE_URL}${url}` : url,
+              chatId: chat.id,
+              chatTitle: chat.title,
+              origin: 'generated',
+              date: chat.createdAt
+            });
+          }
+
+          const chartRegex = /\[EmbedChart:([^\]]+)\]/i;
+          const mdChartRegex = /\[[^\]]+\]\((\/(?:static\/charts|generated\/charts)\/[^)]+\.html)\)/i;
+          const azureChartRegex = /\((https:\/\/soleblob1.blob.core.windows.net\/stecnico\/generated\/charts\/[^)]+\.html)\)/i;
+          
+          let chartMatch = chartRegex.exec(msg.content) || mdChartRegex.exec(msg.content) || azureChartRegex.exec(msg.content);
+          if (chartMatch) {
+            const url = chartMatch[1];
+            const name = url.substring(url.lastIndexOf('/') + 1);
+            files.push({
+              name: name || 'Gráfico Interactivo',
+              type: 'text/html',
+              url: url.startsWith('/') ? `${API_BASE_URL}${url}` : url,
+              chatId: chat.id,
+              chatTitle: chat.title,
+              origin: 'generated',
+              date: chat.createdAt
+            });
+          }
+        }
+      });
+    });
+    
+    const uniqueFiles = [];
+    const seenUrls = new Set();
+    files.forEach(f => {
+      if (!seenUrls.has(f.url)) {
+        seenUrls.add(f.url);
+        uniqueFiles.push(f);
+      }
+    });
+    
+    return uniqueFiles;
+  };
+
+  const libraryFiles = getLibraryFiles();
+
   // Helper to extract Plotly charts and Excel links from output
   const renderMessageContent = (content, index) => {
     const embedChartRegex = /\[EmbedChart:([^\]]+)\]/i;
-    const mdChartRegex = /\[[^\]]+\]\((\/static\/charts\/[^)]+\.html)\)/i;
+    const mdChartRegex = /\[[^\]]+\]\((\/(?:static\/charts|generated\/charts)\/[^)]+\.html)\)/i;
+    const azureChartRegex = /\((https:\/\/soleblob1.blob.core.windows.net\/stecnico\/generated\/charts\/[^)]+\.html)\)/i;
     
     const excelDownloadRegex = /\[Descargar Reporte Excel\]\(([^)]+)\)/i;
-    const mdExcelRegex = /\[[^\]]+\]\((\/static\/reports\/[^)]+\.xlsx)\)/i;
+    const mdExcelRegex = /\[[^\]]+\]\((\/(?:static\/reports|generated\/reports)\/[^)]+\.xlsx)\)/i;
+    const azureExcelRegex = /\((https:\/\/soleblob1.blob.core.windows.net\/stecnico\/generated\/reports\/[^)]+\.xlsx)\)/i;
     
     let chartUrl = null;
     let excelUrl = null;
     
-    const matchChart = embedChartRegex.exec(content) || mdChartRegex.exec(content);
+    const matchChart = embedChartRegex.exec(content) || mdChartRegex.exec(content) || azureChartRegex.exec(content);
     if (matchChart) chartUrl = matchChart[1];
     
-    const matchExcel = excelDownloadRegex.exec(content) || mdExcelRegex.exec(content);
+    const matchExcel = excelDownloadRegex.exec(content) || mdExcelRegex.exec(content) || azureExcelRegex.exec(content);
     if (matchExcel) excelUrl = matchExcel[1];
     
     let cleanedContent = content;
     if (chartUrl) {
       cleanedContent = cleanedContent
         .replace(/\[EmbedChart:[^\]]+\]/gi, '')
-        .replace(/\[[^\]]+\]\(\/static\/charts\/[^)]+\.html\)/gi, '');
+        .replace(/\[[^\]]+\]\(\/(?:static\/charts|generated\/charts)\/[^)]+\.html\)/gi, '')
+        .replace(/\[[^\]]+\]\(https:\/\/soleblob1.blob.core.windows.net\/stecnico\/generated\/charts\/[^)]+\.html\)/gi, '');
     }
     if (excelUrl) {
       cleanedContent = cleanedContent
         .replace(/\[Descargar Reporte Excel\]\([^)]+\)/gi, '')
-        .replace(/\[[^\]]+\]\(\/static\/reports\/[^)]+\.xlsx\)/gi, '');
+        .replace(/\[[^\]]+\]\(\/(?:static\/reports|generated\/reports)\/[^)]+\.xlsx\)/gi, '')
+        .replace(/\[[^\]]+\]\(https:\/\/soleblob1.blob.core.windows.net\/stecnico\/generated\/reports\/[^)]+\.xlsx\)/gi, '');
     }
     
     const parsedHtml = parseMarkdown(cleanedContent.trim());
@@ -587,6 +757,134 @@ function App() {
 
   const activeMessages = getActiveMessages();
 
+  if (!token) {
+    if (!showLoginForm) {
+      return (
+        <div className="landing-container">
+          <header className="landing-header">
+            <div className="landing-logo">
+              <BotSparkleIcon />
+              <span className="landing-logo-text">KIRA</span>
+            </div>
+            <button className="landing-login-btn" onClick={() => setShowLoginForm(true)}>
+              Iniciar Sesión
+            </button>
+          </header>
+          
+          <main className="landing-hero">
+            <h1 className="landing-title">
+              Optimiza la atención al cliente con la potencia de <span className="highlight-text">Kira</span>
+            </h1>
+            <p className="landing-subtitle">
+              El asistente inteligente diseñado para la postventa y servicio técnico de Grupo SOLE / Rinnai. Consulta bases de datos, SAP C4C, genera reportes en Excel y gráficos en tiempo real.
+            </p>
+            <div className="landing-hero-actions">
+              <button className="landing-cta-btn" onClick={() => setShowLoginForm(true)}>
+                Comenzar Ahora
+              </button>
+            </div>
+          </main>
+          
+          <section className="landing-features">
+            <div className="landing-feature-card">
+              <div className="feature-icon">🔍</div>
+              <h3 className="feature-title">Monitoreo de SAP C4C</h3>
+              <p className="feature-desc">Accede y consulta en tiempo real el estado de tickets y datos OData de SAP C4C.</p>
+            </div>
+            <div className="landing-feature-card">
+              <div className="feature-icon">📊</div>
+              <h3 className="feature-title">Reportes y Gráficos</h3>
+              <p className="feature-desc">Genera reportes detallados en Excel y gráficos interactivos de rendimiento de forma instantánea.</p>
+            </div>
+            <div className="landing-feature-card">
+              <div className="feature-icon">🧠</div>
+              <h3 className="feature-title">IA Orientada a Negocio</h3>
+              <p className="feature-desc">Optimizado para resolver dudas de servicio técnico, gestión de garantías y postventa.</p>
+            </div>
+          </section>
+          
+          <footer className="landing-footer">
+            <div className="landing-footer-credits">
+              <span className="footer-title">Una plataforma de</span>
+              <span style={{ fontSize: '20px', fontWeight: 'bold', letterSpacing: '2px', color: '#ff5e62' }}>SOLE</span>
+            </div>
+            <p className="footer-rights">© 2026 Grupo SOLE / Rinnai. Todos los derechos reservados.</p>
+          </footer>
+        </div>
+      );
+    } else {
+      return (
+        <div className="login-container">
+          <div className="login-card-wrapper">
+            <header className="login-card-header">
+              <div className="login-logo">
+                <BotSparkleIcon />
+                <span>KIRA</span>
+              </div>
+              <button className="login-back-btn" onClick={() => setShowLoginForm(false)} title="Volver al inicio">
+                ←
+              </button>
+            </header>
+            
+            <h2 className="login-title">Bienvenido</h2>
+            <p className="login-subtitle">Inicia sesión con tus credenciales de Grupo SOLE</p>
+            
+            <form className="login-form" onSubmit={handleLogin}>
+              <div className="form-group">
+                <label className="form-label" htmlFor="username">Usuario o Correo</label>
+                <input 
+                  type="text" 
+                  id="username" 
+                  className="form-input" 
+                  placeholder="Ej. RAARBIETO"
+                  value={loginUsername}
+                  onChange={(e) => setLoginUsername(e.target.value)}
+                  required
+                />
+              </div>
+              
+              <div className="form-group">
+                <label className="form-label" htmlFor="password">Contraseña</label>
+                <div className="form-password-wrapper">
+                  <input 
+                    type={showPassword ? "text" : "password"} 
+                    id="password" 
+                    className="form-input"
+                    placeholder="••••••••"
+                    value={loginPassword}
+                    onChange={(e) => setLoginPassword(e.target.value)}
+                    required
+                  />
+                  <button 
+                    type="button" 
+                    className="password-toggle-btn"
+                    onClick={() => setShowPassword(!showPassword)}
+                  >
+                    {showPassword ? "Ocultar" : "Mostrar"}
+                  </button>
+                </div>
+              </div>
+              
+              {loginError && (
+                <div className="login-error-alert">
+                  {loginError}
+                </div>
+              )}
+              
+              <button 
+                type="submit" 
+                className="login-submit-btn"
+                disabled={isLoggingIn}
+              >
+                {isLoggingIn ? "Iniciando sesión..." : "Ingresar"}
+              </button>
+            </form>
+          </div>
+        </div>
+      );
+    }
+  }
+
   return (
     <div className="app-container">
       {/* 1. LEFT PANEL: Sidebar */}
@@ -621,49 +919,113 @@ function App() {
           />
         </div>
 
-        <div className="sidebar-content">
-          {/* History Sections */}
-          <div className="sidebar-section">
-            <span className="sidebar-section-title">Conversaciones Recientes</span>
-            <div className="history-list">
-              {filteredChats.length === 0 ? (
-                <div style={{ padding: '8px', fontSize: '12px', color: 'var(--text-muted)' }}>Sin chats recientes</div>
-              ) : (
-                filteredChats.map(c => (
-                  <div 
-                    key={c.id} 
-                    className={`history-item ${activeChatId === c.id ? 'active' : ''}`}
-                    onClick={() => setActiveChatId(c.id)}
-                  >
-                    <span className="history-item-text">{c.title}</span>
-                    <button className="history-delete-btn" onClick={(e) => handleDeleteChat(c.id, e)} title="Eliminar chat">
-                      <TrashIcon />
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* Library of Prompts for SOLE & GAC */}
-          <div className="sidebar-section">
-            <span className="sidebar-section-title">Biblioteca de Plantillas</span>
-            <div className="suggested-list">
-              <button className="suggested-btn" onClick={() => handleSendMessage('¿Cómo va el rendimiento del CAS Lima este mes?')}>
-                📋 Rendimiento CAS Lima
-              </button>
-              <button className="suggested-btn" onClick={() => handleSendMessage('Muéstrame los 5 principales motivos de no atención de visitas')}>
-                ⚠️ No atenciones FSM
-              </button>
-              <button className="suggested-btn" onClick={() => handleSendMessage('Genera un gráfico de barras del NPS promedio por cada CAS')}>
-                📊 Gráfico de NPS por CAS
-              </button>
-              <button className="suggested-btn" onClick={() => handleSendMessage('Descarga un reporte en Excel de todos los servicios cerrados este mes')}>
-                📥 Descargar servicios de este mes
-              </button>
-            </div>
-          </div>
+        {/* Sidebar Tabs */}
+        <div className="sidebar-tabs">
+          <button 
+            className={`sidebar-tab-btn ${sidebarTab === 'chats' ? 'active' : ''}`}
+            onClick={() => setSidebarTab('chats')}
+          >
+            Chats
+          </button>
+          <button 
+            className={`sidebar-tab-btn ${sidebarTab === 'library' ? 'active' : ''}`}
+            onClick={() => setSidebarTab('library')}
+          >
+            Biblioteca
+          </button>
         </div>
+
+        {sidebarTab === 'chats' ? (
+          <div className="sidebar-content">
+            {/* History Sections */}
+            <div className="sidebar-section">
+              <span className="sidebar-section-title">Conversaciones Recientes</span>
+              <div className="history-list">
+                {filteredChats.length === 0 ? (
+                  <div style={{ padding: '8px', fontSize: '12px', color: 'var(--text-muted)' }}>Sin chats recientes</div>
+                ) : (
+                  filteredChats.map(c => (
+                    <div 
+                      key={c.id} 
+                      className={`history-item ${activeChatId === c.id ? 'active' : ''}`}
+                      onClick={() => setActiveChatId(c.id)}
+                    >
+                      <span className="history-item-text">{c.title}</span>
+                      <button className="history-delete-btn" onClick={(e) => handleDeleteChat(c.id, e)} title="Eliminar chat">
+                        <TrashIcon />
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* Library of Prompts for SOLE & GAC */}
+            <div className="sidebar-section">
+              <span className="sidebar-section-title">Biblioteca de Plantillas</span>
+              <div className="suggested-list">
+                <button className="suggested-btn" onClick={() => handleSendMessage('¿Cómo va el rendimiento del CAS Lima este mes?')}>
+                  📋 Rendimiento CAS Lima
+                </button>
+                <button className="suggested-btn" onClick={() => handleSendMessage('Muéstrame los 5 principales motivos de no atención de visitas')}>
+                  ⚠️ No atenciones FSM
+                </button>
+                <button className="suggested-btn" onClick={() => handleSendMessage('Genera un gráfico de barras del NPS promedio por cada CAS')}>
+                  📊 Gráfico de NPS por CAS
+                </button>
+                <button className="suggested-btn" onClick={() => handleSendMessage('Descarga un reporte en Excel de todos los servicios cerrados este mes')}>
+                  📥 Descargar servicios de este mes
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="library-list">
+            {libraryFiles.length === 0 ? (
+              <div style={{ padding: '16px', fontSize: '12px', color: 'var(--text-muted)', textAlign: 'center' }}>
+                No se han detectado archivos en tus conversaciones.
+              </div>
+            ) : (
+              libraryFiles.map((file, idx) => {
+                const isExcel = file.name.endsWith('.xlsx');
+                const isChart = file.name.endsWith('.html');
+                const isImage = file.type.startsWith('image/');
+                
+                let fileIcon = '📄';
+                if (isExcel) fileIcon = '📊';
+                else if (isChart) fileIcon = '📈';
+                else if (isImage) fileIcon = '🖼️';
+                
+                return (
+                  <div 
+                    key={idx} 
+                    className="library-item"
+                    onClick={() => {
+                      setActiveChatId(file.chatId);
+                      if (window.innerWidth <= 768) {
+                        setIsSidebarOpen(false);
+                      }
+                    }}
+                  >
+                    <span className="library-item-icon">{fileIcon}</span>
+                    <div className="library-item-info">
+                      <a 
+                        href={file.url} 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="library-item-name"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {file.name}
+                      </a>
+                      <span className="library-item-chat">En: {file.chatTitle}</span>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        )}
 
         <div className="sidebar-footer">
           <div className="status-badge">
@@ -704,8 +1066,14 @@ function App() {
               {theme === 'dark' ? <SunIcon /> : <MoonIcon />}
             </button>
             
-            <div className="header-action-btn" title="Usuario">
+            <div className="header-user-profile">
               <UserIcon />
+              <div className="user-name-badge" title={user?.full_name || username}>
+                {user?.full_name || username}
+              </div>
+              <button className="logout-btn" onClick={handleLogout}>
+                Cerrar Sesión
+              </button>
             </div>
           </div>
         </div>
@@ -714,7 +1082,7 @@ function App() {
         {activeMessages.length <= 1 ? (
           <div className="welcome-container">
             <div>
-              <h1 className="gemini-welcome-title">Hola, Óscar</h1>
+              <h1 className="gemini-welcome-title">Hola, {user?.full_name?.split(' ')[0] || 'Óscar'}</h1>
               <h2 className="gemini-welcome-subtitle">¿En qué puedo ayudarte hoy en la atención al cliente y postventa?</h2>
             </div>
             
@@ -753,12 +1121,22 @@ function App() {
                       {msg.attachment && (
                         <div className="chat-message-attachment">
                           {msg.attachment.type.startsWith('image/') ? (
-                            <img src={`data:${msg.attachment.type};base64,${msg.attachment.data}`} alt="attachment" />
+                            <img src={msg.attachment.url || `data:${msg.attachment.type};base64,${msg.attachment.data}`} alt="attachment" />
                           ) : (
                             <div className="chat-message-attachment-icon"><FileIcon /></div>
                           )}
                           <div className="chat-message-attachment-info">
-                            <div className="chat-message-attachment-name">{msg.attachment.name}</div>
+                            <div className="chat-message-attachment-name">
+                              <a 
+                                href={msg.attachment.url || `data:${msg.attachment.type};base64,${msg.attachment.data}`} 
+                                download={msg.attachment.name}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{ color: 'inherit', textDecoration: 'none' }}
+                              >
+                                {msg.attachment.name}
+                              </a>
+                            </div>
                             <div className="chat-message-attachment-size">{msg.attachment.type}</div>
                           </div>
                         </div>

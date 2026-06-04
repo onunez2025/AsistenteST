@@ -8,6 +8,8 @@ import plotly.express as px
 from datetime import datetime
 from dotenv import load_dotenv
 from fastmcp import FastMCP
+from azure.storage.blob import BlobServiceClient, ContentSettings
+from typing import Optional
 
 # Setup logging to stderr because stdout is used for MCP stdio protocol communication
 logging.basicConfig(
@@ -30,6 +32,31 @@ SQL_SERVER = os.getenv("SQL_SERVER")
 SQL_DATABASE = os.getenv("SQL_DATABASE")
 SQL_USER = os.getenv("SQL_USER")
 SQL_PASSWORD = os.getenv("SQL_PASSWORD")
+
+# Azure Blob Storage Config
+AZURE_STORAGE_CONNECTION_STRING = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
+AZURE_STORAGE_CONTAINER = os.getenv("AZURE_STORAGE_CONTAINER", "stecnico")
+
+def upload_file_to_azure_blob(local_filepath: str, blob_name: str, content_type: str) -> Optional[str]:
+    """Uploads a local file to Azure Blob Storage and returns its URL."""
+    if not AZURE_STORAGE_CONNECTION_STRING:
+        logger.warning("AZURE_STORAGE_CONNECTION_STRING no configurada. Retornando local path.")
+        return None
+    try:
+        blob_service_client = BlobServiceClient.from_connection_string(AZURE_STORAGE_CONNECTION_STRING)
+        blob_client = blob_service_client.get_blob_client(container=AZURE_STORAGE_CONTAINER, blob=blob_name)
+        
+        # Upload the file
+        with open(local_filepath, "rb") as data:
+            blob_client.upload_blob(data, overwrite=True, content_settings=ContentSettings(content_type=content_type))
+        
+        # URL of the uploaded blob
+        url = blob_client.url
+        logger.info(f"Archivo subido exitosamente a Azure Blob Storage: {url}")
+        return url
+    except Exception as e:
+        logger.error(f"Error subiendo archivo a Azure Blob Storage: {e}")
+        return None
 
 # Define directories relative to this file's location to ensure correctness
 BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -132,8 +159,21 @@ def generar_reporte_excel(sql_query: str, nombre_reporte: str) -> str:
         
         df.to_excel(filepath, index=False, sheet_name="Reporte Chatbot")
         
-        # Devolver el path relativo para descargar desde FastAPI
-        url = f"/static/reports/{filename}"
+        # Subir a Azure Blob Storage
+        blob_name = f"generated/reports/{filename}"
+        azure_url = upload_file_to_azure_blob(filepath, blob_name, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        
+        if azure_url:
+            # Eliminar archivo local
+            try:
+                os.remove(filepath)
+            except Exception as ex:
+                logger.error(f"No se pudo eliminar el archivo temporal local: {ex}")
+            url = azure_url
+        else:
+            # Fallback a URL local si falla Azure
+            url = f"/static/reports/{filename}"
+        
         return f"Reporte Excel generado con éxito. Descárgalo aquí: [Descargar Reporte Excel]({url})"
         
     except Exception as e:
@@ -196,8 +236,21 @@ def generar_grafico(sql_query: str, tipo_grafico: str, columna_x: str, columna_y
         
         fig.write_html(filepath, include_plotlyjs="cdn", full_html=True)
         
-        # Devolver path relativo para embed en el frontend
-        url = f"/static/charts/{filename}"
+        # Subir a Azure Blob Storage
+        blob_name = f"generated/charts/{filename}"
+        azure_url = upload_file_to_azure_blob(filepath, blob_name, "text/html")
+        
+        if azure_url:
+            # Eliminar archivo local
+            try:
+                os.remove(filepath)
+            except Exception as ex:
+                logger.error(f"No se pudo eliminar el archivo temporal local: {ex}")
+            url = azure_url
+        else:
+            # Fallback a URL local si falla Azure
+            url = f"/static/charts/{filename}"
+        
         return f"Gráfico interactivo generado con éxito. [EmbedChart:{url}]"
         
     except Exception as e:

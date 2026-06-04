@@ -6,19 +6,23 @@ import sys
 import uuid
 import base64
 import io
+import bcrypt
+import jwt
+import pyodbc
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timezone, timedelta
 from contextlib import asynccontextmanager
 import pandas as pd
 import requests
 from requests.auth import HTTPBasicAuth
-from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks
+from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks, Header, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from openai import OpenAI
 import fitz  # PyMuPDF
+from azure.storage.blob import BlobServiceClient, ContentSettings
 
 # MCP imports
 from mcp import ClientSession, StdioServerParameters
@@ -35,6 +39,31 @@ elif os.path.exists("../.env"):
     load_dotenv("../.env")
 else:
     load_dotenv()
+
+# SQL Azure Config
+SQL_SERVER = os.getenv("SQL_SERVER")
+SQL_DATABASE = os.getenv("SQL_DATABASE")
+SQL_USER = os.getenv("SQL_USER")
+SQL_PASSWORD = os.getenv("SQL_PASSWORD")
+
+def get_db_connection():
+    conn_str = (
+        f"DRIVER={{ODBC Driver 17 for SQL Server}};"
+        f"SERVER={SQL_SERVER};"
+        f"DATABASE={SQL_DATABASE};"
+        f"UID={SQL_USER};"
+        f"PWD={SQL_PASSWORD};"
+        f"Encrypt=yes;"
+        f"TrustServerCertificate=no;"
+    )
+    return pyodbc.connect(conn_str)
+
+# Azure Blob Storage Config
+AZURE_STORAGE_CONNECTION_STRING = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
+AZURE_STORAGE_CONTAINER = os.getenv("AZURE_STORAGE_CONTAINER", "stecnico")
+
+# JWT Configuration
+JWT_SECRET = os.getenv("JWT_SECRET", "super-secret-key-for-kira-token-gac-sole-rinnai-2026-mt-industrial")
 
 # DeepSeek Config
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
@@ -128,7 +157,8 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 class Attachment(BaseModel):
     name: str
     type: str  # e.g., "application/pdf", "image/png"
-    data: str  # base64 data string
+    data: Optional[str] = None  # base64 data string (optional)
+    url: Optional[str] = None  # Azure blob URL
 
 class ChatMessage(BaseModel):
     role: str  # 'user' or 'assistant'
@@ -139,10 +169,22 @@ class ChatRequest(BaseModel):
     messages: List[ChatMessage]
 
 def parse_attachment_to_text(attachment: Attachment) -> str:
-    """Decodes file bytes and extracts text or generates a markdown summary."""
+    """Decodes file bytes or downloads from URL, and extracts text or generates a markdown summary."""
     try:
-        # Decode base64
-        file_bytes = base64.b64decode(attachment.data)
+        file_bytes = None
+        if attachment.url:
+            logger.info(f"Descargando adjunto desde URL: {attachment.url}")
+            resp = requests.get(attachment.url, timeout=15)
+            if resp.status_code == 200:
+                file_bytes = resp.content
+            else:
+                raise Exception(f"No se pudo descargar de Azure (HTTP {resp.status_code})")
+        elif attachment.data:
+            file_bytes = base64.b64decode(attachment.data)
+            
+        if not file_bytes:
+            raise Exception("No se proporcionó data ni URL para el archivo adjunto.")
+            
         file_name_lower = attachment.name.lower()
         file_type_lower = attachment.type.lower()
         
@@ -550,6 +592,147 @@ async def get_task_status(task_id: str):
 @app.get("/")
 def read_root():
     return {"message": "API del Asistente Inteligente ST (con soporte MCP y Multimodal) activa."}
+
+# --- AUTH AND UPLOAD ENDPOINTS ---
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+@app.post("/api/auth/login")
+async def login_endpoint(req: LoginRequest):
+    username = req.username.strip()
+    password = req.password.strip()
+    
+    if not username or not password:
+        raise HTTPException(status_code=400, detail="Usuario y contraseña son requeridos.")
+        
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        query = """
+            SELECT u.Id, u.FullName, u.Username, u.Email, u.PasswordHash, u.RoleId, r.Name,
+                   u.ManagementId, m.Name, u.IsActive, u.Apps, u.AvatarUrl
+            FROM EBM.Users u
+            LEFT JOIN EBM.Roles r ON u.RoleId = r.Id
+            LEFT JOIN EBM.Managements m ON u.ManagementId = m.Id
+            WHERE (u.Username = ? OR u.Email = ?) AND u.IsActive = 1
+        """
+        cursor.execute(query, (username, username))
+        row = cursor.fetchone()
+        conn.close()
+        
+        if not row:
+            raise HTTPException(status_code=401, detail="Credenciales inválidas o usuario inactivo.")
+            
+        (uid, full_name, db_username, email, password_hash, role_id, role_name, 
+         mgmt_id, mgmt_name, is_active, apps, avatar_url) = row
+         
+        # Permitimos el acceso si tiene KIRA, TCTRL, ADMIN o EBM en Apps
+        user_apps = (apps or "").upper()
+        has_app_access = any(app in user_apps for app in ["KIRA", "TCTRL", "ADMIN", "EBM"])
+        if not has_app_access:
+            raise HTTPException(status_code=403, detail="El usuario no tiene acceso a la aplicación Kira.")
+            
+        # Validación de contraseña
+        is_match = False
+        if password_hash:
+            try:
+                is_match = bcrypt.checkpw(password.encode('utf-8'), password_hash.encode('utf-8'))
+            except Exception as e:
+                logger.warning(f"Error en comparación bcrypt: {e}. Intentando texto plano.")
+                
+            if not is_match:
+                is_match = (password_hash == password)
+                
+        if not is_match:
+            raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos.")
+            
+        payload = {
+            "id": str(uid),
+            "username": db_username,
+            "full_name": full_name,
+            "email": email,
+            "role_name": role_name,
+            "management_name": mgmt_name,
+            "exp": datetime.now(timezone.utc) + timedelta(hours=24)
+        }
+        token = jwt.encode(payload, JWT_SECRET, algorithm="HS256")
+        
+        safe_user = {
+            "id": str(uid),
+            "username": db_username,
+            "full_name": full_name,
+            "email": email,
+            "role_name": role_name,
+            "management_name": mgmt_name,
+            "avatar_url": avatar_url
+        }
+        
+        return {"user": safe_user, "token": token}
+        
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        logger.error(f"Error en endpoint login: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error en el servidor de autenticación: {str(e)}")
+
+@app.get("/api/auth/me")
+async def me_endpoint(authorization: Optional[str] = Header(None)):
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Token no proporcionado.")
+        
+    token = authorization.split(" ")[1]
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+        return {
+            "user": {
+                "id": payload.get("id"),
+                "username": payload.get("username"),
+                "full_name": payload.get("full_name"),
+                "email": payload.get("email"),
+                "role_name": payload.get("role_name"),
+                "management_name": payload.get("management_name")
+            }
+        }
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="El token ha expirado.")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Token inválido.")
+
+@app.post("/api/upload")
+async def upload_file_endpoint(file: UploadFile = File(...)):
+    if not AZURE_STORAGE_CONNECTION_STRING:
+        # Fallback a local si falta la configuración de Azure
+        uploads_dir = os.path.join(STATIC_DIR, "uploads")
+        os.makedirs(uploads_dir, exist_ok=True)
+        filename = f"{uuid.uuid4()}_{file.filename}"
+        filepath = os.path.join(uploads_dir, filename)
+        with open(filepath, "wb") as f:
+            f.write(await file.read())
+        return {"url": f"/static/uploads/{filename}"}
+    
+    try:
+        file_bytes = await file.read()
+        filename = f"{uuid.uuid4()}_{file.filename}"
+        blob_name = f"uploads/{filename}"
+        
+        # Subir a Azure
+        blob_service_client = BlobServiceClient.from_connection_string(AZURE_STORAGE_CONNECTION_STRING)
+        blob_client = blob_service_client.get_blob_client(container=AZURE_STORAGE_CONTAINER, blob=blob_name)
+        
+        blob_client.upload_blob(
+            file_bytes,
+            overwrite=True,
+            content_settings=ContentSettings(content_type=file.content_type)
+        )
+        
+        logger.info(f"Archivo subido exitosamente a Azure Blob: {blob_client.url}")
+        return {"url": blob_client.url}
+    except Exception as e:
+        logger.error(f"Error subiendo archivo en endpoint: {e}")
+        raise HTTPException(status_code=500, detail=f"Error al subir el archivo: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn
