@@ -52,10 +52,10 @@ const MoonIcon = () => (
 
 const BotSparkleIcon = () => (
   <svg className="sparkle-logo-svg" viewBox="0 0 24 24" width="24" height="24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-    <path d="M12 2c-.1 0-.3.1-.4.2L9.4 6.7 4.9 8.7c-.2.1-.3.3-.3.4v.4c0 .2.1.3.3.4l4.5 2 2.2 4.5c.1.2.3.3.4.3h.4c.2 0 .3-.1.4-.3l2.2-4.5 4.5-2c.2-.1.3-.3.3-.4v-.4c0-.2-.1-.3-.3-.4l-4.5-2-2.2-4.5c-.1-.1-.3-.2-.4-.2h-.4z" fill="url(#kira-sparkle-grad)" />
-    <path d="M19 14c-.05 0-.15.05-.2.1l-1.1 2.2-2.2 1.1c-.1.05-.15.15-.15.2v.2c0 .1.05.15.15.2l2.2 1.1 1.1 2.2c.05.1.15.15.2.15h.2c.1 0 .15-.05.2-.15l1.1-2.2 2.2-1.1c.1-.05.15-.15.15-.2v-.2c0-.1-.05-.15-.15-.2l-2.2-1.1-1.1-2.2c-.05-.05-.15-.1-.2-.1h-.2z" fill="url(#kira-sparkle-grad)" />
+    <path d="M12 2c-.1 0-.3.1-.4.2L9.4 6.7 4.9 8.7c-.2.1-.3.3-.3.4v.4c0 .2.1.3.3.4l4.5 2 2.2 4.5c.1.2.3.3.4.3h.4c.2 0 .3-.1.4-.3l2.2-4.5 4.5-2c.2-.1.3-.3.3-.4v-.4c0-.2-.1-.3-.3-.4l-4.5-2-2.2-4.5c-.1-.1-.3-.2-.4-.2h-.4z" fill="url(#siatc-sparkle-grad)" />
+    <path d="M19 14c-.05 0-.15.05-.2.1l-1.1 2.2-2.2 1.1c-.1.05-.15.15-.15.2v.2c0 .1.05.15.15.2l2.2 1.1 1.1 2.2c.05.1.15.15.2.15h.2c.1 0 .15-.05.2-.15l1.1-2.2 2.2-1.1c.1-.05.15-.15.15-.2v-.2c0-.1-.05-.15-.15-.2l-2.2-1.1-1.1-2.2c-.05-.05-.15-.1-.2-.1h-.2z" fill="url(#siatc-sparkle-grad)" />
     <defs>
-      <linearGradient id="kira-sparkle-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <linearGradient id="siatc-sparkle-grad" x1="0%" y1="0%" x2="100%" y2="100%">
         <stop offset="0%" stopColor="#ff5e62" />
         <stop offset="50%" stopColor="#ff9966" />
         <stop offset="100%" stopColor="#ffdf00" />
@@ -176,9 +176,9 @@ function App() {
   };
 
   // Auth States
-  const [token, setToken] = useState(() => localStorage.getItem('kira_token') || null);
+  const [token, setToken] = useState(() => localStorage.getItem('siatc_token') || null);
   const [user, setUser] = useState(() => {
-    const saved = localStorage.getItem('kira_user');
+    const saved = localStorage.getItem('siatc_user');
     return saved ? JSON.parse(saved) : null;
   });
   const [loginUsername, setLoginUsername] = useState('');
@@ -282,7 +282,7 @@ function App() {
       messages: [
         {
           role: 'assistant',
-          content: '¡Hola! Soy **Kira**, tu Asistente de Atención al Cliente de **Grupo SOLE / Rinnai**.\n\n¿En qué puedo ayudarte hoy? Puedes hacerme preguntas sobre tickets en C4C, resúmenes operativos, rendimiento de técnicos o solicitar reportes en Excel y gráficos.'
+          content: '¡Hola! Soy **SIATC.IA**, tu Asistente de Atención al Cliente de **Grupo SOLE / Rinnai**.\n\n¿En qué puedo ayudarte hoy? Puedes hacerme preguntas sobre tickets en C4C, resúmenes operativos, rendimiento de técnicos o solicitar reportes en Excel y gráficos.'
         }
       ],
       createdAt: new Date().toISOString()
@@ -577,8 +577,8 @@ function App() {
       }
 
       const data = await response.json();
-      localStorage.setItem('kira_token', data.token);
-      localStorage.setItem('kira_user', JSON.stringify(data.user));
+      localStorage.setItem('siatc_token', data.token);
+      localStorage.setItem('siatc_user', JSON.stringify(data.user));
       setToken(data.token);
       setUser(data.user);
       
@@ -593,8 +593,8 @@ function App() {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('kira_token');
-    localStorage.removeItem('kira_user');
+    localStorage.removeItem('siatc_token');
+    localStorage.removeItem('siatc_user');
     setToken(null);
     setUser(null);
     setChats([]);
@@ -773,7 +773,7 @@ function App() {
           <header className="landing-header">
             <div className="landing-logo">
               <BotSparkleIcon />
-              <span className="landing-logo-text">KIRA</span>
+              <span className="landing-logo-text">SIATC.IA</span>
             </div>
             <button className="landing-login-btn" onClick={() => setShowLoginForm(true)}>
               Iniciar Sesión
@@ -782,7 +782,7 @@ function App() {
           
           <main className="landing-hero">
             <h1 className="landing-title">
-              Optimiza la atención al cliente con la potencia de <span className="highlight-text">Kira</span>
+              Optimiza la atención al cliente con la potencia de <span className="highlight-text">SIATC.IA</span>
             </h1>
             <p className="landing-subtitle">
               El asistente inteligente diseñado para la postventa y servicio técnico de Grupo SOLE / Rinnai. Consulta bases de datos, SAP C4C, genera reportes en Excel y gráficos en tiempo real.
@@ -828,7 +828,7 @@ function App() {
             <header className="login-card-header">
               <div className="login-logo">
                 <BotSparkleIcon />
-                <span>KIRA</span>
+                <span>SIATC.IA</span>
               </div>
               <button className="login-back-btn" onClick={() => setShowLoginForm(false)} title="Volver al inicio">
                 ←
@@ -906,7 +906,7 @@ function App() {
             <BotSparkleIcon />
           </div>
           <div className="brand-info">
-            <span className="brand-title">Kira</span>
+            <span className="brand-title">SIATC.IA</span>
             <span className="brand-subtitle">Grupo SOLE / Rinnai</span>
           </div>
         </div>
@@ -1023,7 +1023,7 @@ function App() {
             <div className="status-dot"></div>
             <span>Conectado a Azure SQL & C4C</span>
           </div>
-          <div>Kira v2.0 (Grupo SOLE / Rinnai)</div>
+          <div>SIATC.IA v2.0 (Grupo SOLE / Rinnai)</div>
         </div>
       </div>
 
@@ -1038,7 +1038,7 @@ function App() {
               </button>
             )}
             <div className="chat-title-container">
-              <span className="chat-title">Panel de Control Inteligente - Kira</span>
+              <span className="chat-title">Panel de Control Inteligente - SIATC.IA</span>
               <span className="chat-subtitle">Servicios y Postventa - Grupo SOLE / Rinnai</span>
             </div>
           </div>
@@ -1196,7 +1196,7 @@ function App() {
                 </button>
                 
                 <textarea
-                  placeholder="Introduce una pregunta para Kira (ej. ¿Cuántos tickets se cerraron ayer?)..."
+                  placeholder="Introduce una pregunta para SIATC.IA (ej. ¿Cuántos tickets se cerraron ayer?)..."
                   className="chat-textarea"
                   rows="1"
                   value={inputText}
@@ -1218,7 +1218,7 @@ function App() {
               </div>
             </div>
             <div className="disclaimer-text">
-              Kira puede cometer errores. Por favor corrobora la información crítica con SAP C4C.
+              SIATC.IA puede cometer errores. Por favor corrobora la información crítica con SAP C4C.
             </div>
           </div>
         </div>
