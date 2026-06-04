@@ -12,6 +12,9 @@ services:
       SAP_USER: ${SAP_USER}
       SAP_PASSWORD: ${SAP_PASSWORD}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+      AZURE_STORAGE_CONNECTION_STRING: ${AZURE_STORAGE_CONNECTION_STRING}
+      AZURE_STORAGE_CONTAINER: ${AZURE_STORAGE_CONTAINER}
+      JWT_SECRET: ${JWT_SECRET}
       TZ: America/Lima
     volumes:
       - backend-static:/app/static
