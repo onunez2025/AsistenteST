@@ -52,13 +52,13 @@ const MoonIcon = () => (
 
 const BotSparkleIcon = () => (
   <svg className="sparkle-logo-svg" viewBox="0 0 24 24" width="24" height="24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-    <path d="M12 2c-.1 0-.3.1-.4.2L9.4 6.7 4.9 8.7c-.2.1-.3.3-.3.4v.4c0 .2.1.3.3.4l4.5 2 2.2 4.5c.1.2.3.3.4.3h.4c.2 0 .3-.1.4-.3l2.2-4.5 4.5-2c.2-.1.3-.3.3-.4v-.4c0-.2-.1-.3-.3-.4l-4.5-2-2.2-4.5c-.1-.1-.3-.2-.4-.2h-.4z" fill="url(#gemini-sparkle-grad)" />
-    <path d="M19 14c-.05 0-.15.05-.2.1l-1.1 2.2-2.2 1.1c-.1.05-.15.15-.15.2v.2c0 .1.05.15.15.2l2.2 1.1 1.1 2.2c.05.1.15.15.2.15h.2c.1 0 .15-.05.2-.15l1.1-2.2 2.2-1.1c.1-.05.15-.15.15-.2v-.2c0-.1-.05-.15-.15-.2l-2.2-1.1-1.1-2.2c-.05-.05-.15-.1-.2-.1h-.2z" fill="url(#gemini-sparkle-grad)" />
+    <path d="M12 2c-.1 0-.3.1-.4.2L9.4 6.7 4.9 8.7c-.2.1-.3.3-.3.4v.4c0 .2.1.3.3.4l4.5 2 2.2 4.5c.1.2.3.3.4.3h.4c.2 0 .3-.1.4-.3l2.2-4.5 4.5-2c.2-.1.3-.3.3-.4v-.4c0-.2-.1-.3-.3-.4l-4.5-2-2.2-4.5c-.1-.1-.3-.2-.4-.2h-.4z" fill="url(#kira-sparkle-grad)" />
+    <path d="M19 14c-.05 0-.15.05-.2.1l-1.1 2.2-2.2 1.1c-.1.05-.15.15-.15.2v.2c0 .1.05.15.15.2l2.2 1.1 1.1 2.2c.05.1.15.15.2.15h.2c.1 0 .15-.05.2-.15l1.1-2.2 2.2-1.1c.1-.05.15-.15.15-.2v-.2c0-.1-.05-.15-.15-.2l-2.2-1.1-1.1-2.2c-.05-.05-.15-.1-.2-.1h-.2z" fill="url(#kira-sparkle-grad)" />
     <defs>
-      <linearGradient id="gemini-sparkle-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" stopColor="#9b51e0" />
-        <stop offset="50%" stopColor="#4285f4" />
-        <stop offset="100%" stopColor="#e05194" />
+      <linearGradient id="kira-sparkle-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stopColor="#ff5e62" />
+        <stop offset="50%" stopColor="#ff9966" />
+        <stop offset="100%" stopColor="#ffdf00" />
       </linearGradient>
     </defs>
   </svg>
@@ -595,8 +595,8 @@ function App() {
           <button className="sidebar-toggle-btn" onClick={() => setIsSidebarOpen(false)} title="Cerrar menú">
             <MenuIcon />
           </button>
-          <div className="logo-container">
-            <div className="logo-text">KI</div>
+          <div className="logo-sparkle">
+            <BotSparkleIcon />
           </div>
           <div className="brand-info">
             <span className="brand-title">Kira</span>
@@ -685,8 +685,8 @@ function App() {
               </button>
             )}
             <div className="chat-title-container">
-              <span className="chat-title">Panel de Control Inteligente ST</span>
-              <span className="chat-subtitle">Servicios y Control Operativo SOLE</span>
+              <span className="chat-title">Panel de Control Inteligente - Kira</span>
+              <span className="chat-subtitle">Servicios y Postventa - Grupo SOLE / Rinnai</span>
             </div>
           </div>
 
@@ -715,7 +715,7 @@ function App() {
           <div className="welcome-container">
             <div>
               <h1 className="gemini-welcome-title">Hola, Óscar</h1>
-              <h2 className="gemini-welcome-subtitle">¿En qué puedo ayudarte hoy en la gestión técnica?</h2>
+              <h2 className="gemini-welcome-subtitle">¿En qué puedo ayudarte hoy en la atención al cliente y postventa?</h2>
             </div>
             
             <div className="welcome-cards-grid">

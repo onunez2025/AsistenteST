@@ -13,7 +13,7 @@
   --accent-cyan: #7fc1ff;
   --accent-indigo: #c3a6ff;
   --accent-purple: #c384fd;
-  --gemini-gradient: linear-gradient(74deg, #4285f4 0%, #9b51e0 50%, #e05194 100%);
+  --gemini-gradient: linear-gradient(74deg, #ff5e62 0%, #ff9966 50%, #ffdf00 100%);
   --chat-user-bg: #282a2c;
   --chat-assistant-bg: transparent;
   --shadow-sm: 0 1px 2px 0 rgba(0,0,0,0.05);
@@ -40,7 +40,7 @@
   --accent-cyan: #1a73e8;
   --accent-indigo: #7033ff;
   --accent-purple: #a82dfd;
-  --gemini-gradient: linear-gradient(74deg, #1a73e8 0%, #833ab4 50%, #fd1d1d 100%);
+  --gemini-gradient: linear-gradient(74deg, #ff4e50 0%, #f9d423 100%);
   --chat-user-bg: #e3e3e3;
   --chat-assistant-bg: transparent;
   --scrollbar-thumb: #c4c7c5;
