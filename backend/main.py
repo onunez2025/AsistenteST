@@ -89,13 +89,16 @@ async def lifespan(app: FastAPI):
     python_cmd = sys.executable or "python"
     backend_dir = os.path.dirname(os.path.abspath(__file__))
     
+    # Forward environment variables explicitly to the subprocesses
+    subproc_env = {**os.environ}
+    
     # 1. Database MCP Server Parameters
     db_script = os.path.join(backend_dir, "mcp_db.py")
-    db_params = StdioServerParameters(command=python_cmd, args=[db_script])
+    db_params = StdioServerParameters(command=python_cmd, args=[db_script], env=subproc_env)
     
     # 2. SAP C4C MCP Server Parameters
     sap_script = os.path.join(backend_dir, "mcp_sap_c4c.py")
-    sap_params = StdioServerParameters(command=python_cmd, args=[sap_script])
+    sap_params = StdioServerParameters(command=python_cmd, args=[sap_script], env=subproc_env)
     
     try:
         # Start DB MCP Server
