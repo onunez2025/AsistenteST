@@ -12,6 +12,7 @@ services:
       SAP_USER: ${SAP_USER}
       SAP_PASSWORD: ${SAP_PASSWORD}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+      TZ: America/Lima
     volumes:
       - backend-static:/app/static
     restart: always

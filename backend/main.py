@@ -3,7 +3,7 @@ import re
 import logging
 import json
 from typing import List, Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 import pandas as pd
 import pyodbc
 import requests
@@ -442,9 +442,11 @@ def run_deepseek_chat_task(task_id: str, history_messages: List[ChatMessage], la
             active_tasks.pop(k, None)
             logger.info(f"[TASK] Tarea antigua {k} removida de memoria.")
 
-        # Obtener fecha y hora actual para el prompt
-        fecha_actual = datetime.now().strftime("%Y-%m-%d")
-        hora_actual = datetime.now().strftime("%H:%M:%S")
+        # Obtener fecha y hora actual en Lima, Perú (UTC-5) para el prompt
+        tz_lima = timezone(timedelta(hours=-5))
+        now_lima = datetime.now(tz_lima)
+        fecha_actual = now_lima.strftime("%Y-%m-%d")
+        hora_actual = now_lima.strftime("%H:%M:%S")
         
         prompt_sistema = (
             "Eres Israel Alejandro (IA), el Asistente de Servicio Técnico de MT Industrial. "
