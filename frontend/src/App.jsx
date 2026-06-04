@@ -909,13 +909,17 @@ function App() {
           </button>
         </div>
 
-        <div className="search-chat-container">
+        <div className="search-chat-container" style={{ position: 'relative' }}>
+          <span style={{ position: 'absolute', left: '26px', top: '50%', transform: 'translateY(-50%)', opacity: 0.4, display: 'flex', alignItems: 'center' }}>
+            <SearchIcon />
+          </span>
           <input 
             type="text" 
-            placeholder="Buscar en el historial..." 
+            placeholder="Buscar chats..." 
             className="search-chat-input"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            style={{ paddingLeft: '38px' }}
           />
         </div>
 
@@ -936,47 +940,25 @@ function App() {
         </div>
 
         {sidebarTab === 'chats' ? (
-          <div className="sidebar-content">
-            {/* History Sections */}
-            <div className="sidebar-section">
-              <span className="sidebar-section-title">Conversaciones Recientes</span>
-              <div className="history-list">
-                {filteredChats.length === 0 ? (
-                  <div style={{ padding: '8px', fontSize: '12px', color: 'var(--text-muted)' }}>Sin chats recientes</div>
-                ) : (
-                  filteredChats.map(c => (
-                    <div 
-                      key={c.id} 
-                      className={`history-item ${activeChatId === c.id ? 'active' : ''}`}
-                      onClick={() => setActiveChatId(c.id)}
-                    >
-                      <span className="history-item-text">{c.title}</span>
-                      <button className="history-delete-btn" onClick={(e) => handleDeleteChat(c.id, e)} title="Eliminar chat">
-                        <TrashIcon />
-                      </button>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-
-            {/* Library of Prompts for SOLE & GAC */}
-            <div className="sidebar-section">
-              <span className="sidebar-section-title">Biblioteca de Plantillas</span>
-              <div className="suggested-list">
-                <button className="suggested-btn" onClick={() => handleSendMessage('¿Cómo va el rendimiento del CAS Lima este mes?')}>
-                  📋 Rendimiento CAS Lima
-                </button>
-                <button className="suggested-btn" onClick={() => handleSendMessage('Muéstrame los 5 principales motivos de no atención de visitas')}>
-                  ⚠️ No atenciones FSM
-                </button>
-                <button className="suggested-btn" onClick={() => handleSendMessage('Genera un gráfico de barras del NPS promedio por cada CAS')}>
-                  📊 Gráfico de NPS por CAS
-                </button>
-                <button className="suggested-btn" onClick={() => handleSendMessage('Descarga un reporte en Excel de todos los servicios cerrados este mes')}>
-                  📥 Descargar servicios de este mes
-                </button>
-              </div>
+          <div className="history-list-container">
+            <span className="history-list-title">Reciente</span>
+            <div className="history-list">
+              {filteredChats.length === 0 ? (
+                <div className="empty-history-text">Sin chats recientes</div>
+              ) : (
+                filteredChats.map(c => (
+                  <div 
+                    key={c.id} 
+                    className={`history-item ${activeChatId === c.id ? 'active' : ''}`}
+                    onClick={() => setActiveChatId(c.id)}
+                  >
+                    <span className="history-item-text">{c.title}</span>
+                    <button className="history-delete-btn" onClick={(e) => handleDeleteChat(c.id, e)} title="Eliminar chat">
+                      <TrashIcon />
+                    </button>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         ) : (
