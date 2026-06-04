@@ -172,7 +172,7 @@ def generar_reporte_excel(sql_query: str, nombre_reporte: str) -> str:
             url = azure_url
         else:
             # Fallback a URL local si falla Azure
-            url = f"/static/reports/{filename}"
+            url = f"/api/download/reports/{filename}"
         
         return f"Reporte Excel generado con éxito. Descárgalo aquí: [Descargar Reporte Excel]({url})"
         
@@ -249,7 +249,7 @@ def generar_grafico(sql_query: str, tipo_grafico: str, columna_x: str, columna_y
             url = azure_url
         else:
             # Fallback a URL local si falla Azure
-            url = f"/static/charts/{filename}"
+            url = f"/api/download/charts/{filename}"
         
         return f"Gráfico interactivo generado con éxito. [EmbedChart:{url}]"
         

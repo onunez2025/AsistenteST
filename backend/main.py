@@ -626,6 +626,32 @@ async def get_task_status(task_id: str):
 def read_root():
     return {"message": "API del Asistente Inteligente ST (con soporte MCP y Multimodal) activa."}
 
+@app.get("/api/download/{subfolder}/{filename}")
+async def download_file(subfolder: str, filename: str):
+    """Serves generated reports and charts from the local static directory."""
+    import mimetypes
+    from fastapi.responses import FileResponse
+    
+    # Only allow specific subfolders for security
+    if subfolder not in ("reports", "charts"):
+        raise HTTPException(status_code=403, detail="Acceso denegado.")
+    
+    filepath = os.path.join(STATIC_DIR, subfolder, filename)
+    
+    if not os.path.exists(filepath):
+        raise HTTPException(status_code=404, detail="Archivo no encontrado o ya fue eliminado.")
+    
+    media_type, _ = mimetypes.guess_type(filepath)
+    if not media_type:
+        media_type = "application/octet-stream"
+    
+    return FileResponse(
+        path=filepath,
+        media_type=media_type,
+        filename=filename
+    )
+
+
 # --- AUTH AND UPLOAD ENDPOINTS ---
 
 class LoginRequest(BaseModel):
