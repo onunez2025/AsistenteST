@@ -626,6 +626,23 @@ async def get_task_status(task_id: str):
 def read_root():
     return {"message": "API del Asistente Inteligente ST (con soporte MCP y Multimodal) activa."}
 
+@app.get("/api/diagnostic")
+async def diagnostic():
+    import os
+    reports_path = os.path.join(STATIC_DIR, "reports")
+    charts_path = os.path.join(STATIC_DIR, "charts")
+    return {
+        "AZURE_STORAGE_CONNECTION_STRING_exists": bool(os.getenv("AZURE_STORAGE_CONNECTION_STRING")),
+        "AZURE_STORAGE_CONTAINER": os.getenv("AZURE_STORAGE_CONTAINER"),
+        "STATIC_DIR": STATIC_DIR,
+        "STATIC_DIR_exists": os.path.exists(STATIC_DIR),
+        "reports_dir_exists": os.path.exists(reports_path),
+        "files_in_reports": os.listdir(reports_path) if os.path.exists(reports_path) else None,
+        "charts_dir_exists": os.path.exists(charts_path),
+        "files_in_charts": os.listdir(charts_path) if os.path.exists(charts_path) else None,
+    }
+
+
 @app.get("/api/download/{subfolder}/{filename}")
 async def download_file(subfolder: str, filename: str):
     """Serves generated reports and charts from the local static directory."""

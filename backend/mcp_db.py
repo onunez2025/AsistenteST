@@ -37,11 +37,11 @@ SQL_PASSWORD = os.getenv("SQL_PASSWORD")
 AZURE_STORAGE_CONNECTION_STRING = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
 AZURE_STORAGE_CONTAINER = os.getenv("AZURE_STORAGE_CONTAINER", "stecnico")
 
-def upload_file_to_azure_blob(local_filepath: str, blob_name: str, content_type: str) -> Optional[str]:
-    """Uploads a local file to Azure Blob Storage and returns its URL."""
+def upload_file_to_azure_blob(local_filepath: str, blob_name: str, content_type: str) -> tuple[Optional[str], Optional[str]]:
+    """Uploads a local file to Azure Blob Storage and returns a tuple (url, error_message)."""
     if not AZURE_STORAGE_CONNECTION_STRING:
         logger.warning("AZURE_STORAGE_CONNECTION_STRING no configurada. Retornando local path.")
-        return None
+        return None, "AZURE_STORAGE_CONNECTION_STRING no configurada en las variables de entorno."
     try:
         blob_service_client = BlobServiceClient.from_connection_string(AZURE_STORAGE_CONNECTION_STRING)
         blob_client = blob_service_client.get_blob_client(container=AZURE_STORAGE_CONTAINER, blob=blob_name)
@@ -53,10 +53,12 @@ def upload_file_to_azure_blob(local_filepath: str, blob_name: str, content_type:
         # URL of the uploaded blob
         url = blob_client.url
         logger.info(f"Archivo subido exitosamente a Azure Blob Storage: {url}")
-        return url
+        return url, None
     except Exception as e:
-        logger.error(f"Error subiendo archivo a Azure Blob Storage: {e}")
-        return None
+        err_msg = str(e)
+        logger.error(f"Error subiendo archivo a Azure Blob Storage: {err_msg}")
+        return None, err_msg
+
 
 # Define directories relative to this file's location to ensure correctness
 BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -161,7 +163,7 @@ def generar_reporte_excel(sql_query: str, nombre_reporte: str) -> str:
         
         # Subir a Azure Blob Storage
         blob_name = f"generated/reports/{filename}"
-        azure_url = upload_file_to_azure_blob(filepath, blob_name, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        azure_url, upload_error = upload_file_to_azure_blob(filepath, blob_name, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         
         if azure_url:
             # Eliminar archivo local
@@ -170,11 +172,12 @@ def generar_reporte_excel(sql_query: str, nombre_reporte: str) -> str:
             except Exception as ex:
                 logger.error(f"No se pudo eliminar el archivo temporal local: {ex}")
             url = azure_url
+            return f"Reporte Excel generado con éxito. Descárgalo aquí: [Descargar Reporte Excel]({url})"
         else:
             # Fallback a URL local si falla Azure
             url = f"/api/download/reports/{filename}"
-        
-        return f"Reporte Excel generado con éxito. Descárgalo aquí: [Descargar Reporte Excel]({url})"
+            return f"Reporte Excel generado con éxito localmente. Nota: La subida a Azure falló ({upload_error}). Descárgalo aquí: [Descargar Reporte Excel]({url})"
+
         
     except Exception as e:
         logger.error(f"Error generando Excel en MCP: {e}")
@@ -238,7 +241,7 @@ def generar_grafico(sql_query: str, tipo_grafico: str, columna_x: str, columna_y
         
         # Subir a Azure Blob Storage
         blob_name = f"generated/charts/{filename}"
-        azure_url = upload_file_to_azure_blob(filepath, blob_name, "text/html")
+        azure_url, upload_error = upload_file_to_azure_blob(filepath, blob_name, "text/html")
         
         if azure_url:
             # Eliminar archivo local
@@ -247,11 +250,12 @@ def generar_grafico(sql_query: str, tipo_grafico: str, columna_x: str, columna_y
             except Exception as ex:
                 logger.error(f"No se pudo eliminar el archivo temporal local: {ex}")
             url = azure_url
+            return f"Gráfico interactivo generado con éxito. [EmbedChart:{url}]"
         else:
             # Fallback a URL local si falla Azure
             url = f"/api/download/charts/{filename}"
-        
-        return f"Gráfico interactivo generado con éxito. [EmbedChart:{url}]"
+            return f"Gráfico interactivo generado con éxito localmente. Nota: La subida a Azure falló ({upload_error}). [EmbedChart:{url}]"
+
         
     except Exception as e:
         logger.error(f"Error generando gráfico en MCP: {e}")
