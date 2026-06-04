@@ -1638,6 +1638,16 @@ h1, h2, h3, .brand-title, .gemini-welcome-title {
   margin-top: 2px;
 }
 
+.library-item-date {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  opacity: 0.85;
+}
+
 /* Responsiveness adjustments for landing */
 @media (max-width: 768px) {
   .landing-header {

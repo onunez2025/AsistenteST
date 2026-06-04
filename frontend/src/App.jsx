@@ -603,6 +603,24 @@ function App() {
     handleNewNote();
   };
 
+  const formatDateTime = (isoString) => {
+    if (!isoString) return '';
+    try {
+      const date = new Date(isoString);
+      if (isNaN(date.getTime())) return '';
+      return date.toLocaleString('es-PE', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      });
+    } catch (e) {
+      return '';
+    }
+  };
+
   const getLibraryFiles = () => {
     const files = [];
     chats.forEach(chat => {
@@ -1010,6 +1028,7 @@ function App() {
                         {file.name}
                       </a>
                       <span className="library-item-chat">En: {file.chatTitle}</span>
+                      <span className="library-item-date">📅 {formatDateTime(file.date)}</span>
                     </div>
                   </div>
                 );
