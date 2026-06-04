@@ -385,7 +385,7 @@ async def run_deepseek_chat_task(task_id: str, history_messages: List[ChatMessag
             "   - Calle, NumeroCalle, Distrito, Ciudad, Pais, CodigoPostal, Referencia (Dirección del cliente)\n"
             "   - IdEquipo (nvarchar), CodigoExternoEquipo (nvarchar), NombreEquipo (nvarchar)\n"
             "   - ComentarioProgramador (nvarchar)\n"
-            "   - IdCAS (varchar), CAS (varchar): ID y nombre del Centro de Atención Autorizado (ej. CAS LIMA, CAS AREQUIPA).\n"
+            "   - IdCAS (varchar), CAS (varchar): ID y nombre del Centro de Atención Autorizado. El campo CAS almacena la razón social completa de la empresa, NO un alias corto. Para filtrar por CAS usa siempre IdCAS o CAS exacto.\n"
             "   - CodigoTecnico (nvarchar), NombreTecnico (nvarchar), ApellidoTecnico (nvarchar): Datos del técnico asignado.\n"
             "   - VisitaRealizada (nvarchar): Indica si se realizó la visita ('true' o 'false').\n"
             "   - TrabajoRealizado (nvarchar): Indica si se realizó el trabajo ('true' o 'false').\n"
@@ -412,7 +412,32 @@ async def run_deepseek_chat_task(task_id: str, history_messages: List[ChatMessag
             "     ON col.Nombre_FSM = RTRIM(fsm.NombreTecnico) + ' ' + RTRIM(fsm.ApellidoTecnico)\n\n"
             "4. TABLA DE CENTROS DE ATENCIÓN AUTORIZADOS (CAS): 'dbo.GAC_APP_TB_CAS'\n"
             "   - ID_CAS (varchar): ID del CAS (ej. '6a138c82').\n"
-            "   - Razon_social (varchar), Nombre_CAS (varchar), RUC (varchar), Direccion_fiscal (varchar), Departamento_fiscal (varchar), Creado_el (datetime), Creado_por (varchar), Abrev_nombre_colaboradores (varchar - ej. 'SS', 'SB2').\n\n"
+            "   - Razon_social (varchar), Nombre_CAS (varchar), RUC (varchar), Direccion_fiscal (varchar), Departamento_fiscal (varchar), Creado_el (datetime), Creado_por (varchar), Abrev_nombre_colaboradores (varchar - ej. 'SS', 'SB2').\n"
+            "   CATÁLOGO DE CAS ACTIVOS (usa el ID exacto en tus consultas SQL con el campo IdCAS de ServiciosViewSQL):\n"
+            "   | Nombre Corto / Alias | CAS (campo en ServiciosViewSQL)       | IdCAS      |\n"
+            "   |---------------------|--------------------------------------|------------|\n"
+            "   | SOLE / MT INDUSTRIAL (técnicos internos de Grupo SOLE) | MT INDUSTRIAL S.A.C. | e9a5a911 |\n"
+            "   | SILAR               | SERVICIOS DE INGENIERIA,LOGISTICA... | 6a138c82   |\n"
+            "   | BLACK               | BLACK PREMIUM SERVICIOS GENERALES... | 0979859c   |\n"
+            "   | SB2 / BLACK         | BLACK PREMIUM SERVICIOS GENERALES S.A.C. | 0979859c |\n"
+            "   | EMSS                | EMSS INGENIERIA E.I.R.L.             | de61e47f   |\n"
+            "   | A&D APPLIANCE       | A & D APPLIANCE E.I.R.L.             | 1e4b470d   |\n"
+            "   | VYA SOLUCIONES      | V & A SOLUCIONES TECNICAS S.C.R.L.   | 1c1123de   |\n"
+            "   | TECNIPLUS           | TECNIPLUS SERVICIOS S.R.L.           | f7f4f828   |\n"
+            "   | T&G                 | TECNOLOGIA & GESTION DE PROYECTOS S.A.C. | 18ac5c56 |\n"
+            "   | AC TECH             | CAPCHA CARDENAS AMOS JOEL            | 3fcd8e23   |\n"
+            "   | CENTRO DE OPERACIONES | CENTRO DE OPERACIONES TECNICO EMPRESARIALES S.A.C. | d6cc2e10 |\n"
+            "   | REYSEP              | REYSEP E.I.R.L.                      | 50b06e93   |\n"
+            "   | SERVITEC LUCIO      | SERVITEC LUCIO REPRESENTACIONES S.R.L. - SERVITEC LUCIO R S.R.L. | ed44e9a9 |\n"
+            "   | VR MTISEV           | VR MTISEV S.A.C.                     | dd5ac4a9   |\n"
+            "   | MULTISERVICIOS      | MULTISERVICIOS RIOJAS S.A.C.         | 5683f95c   |\n"
+            "   | SERVINORTE          | SERVICIOS ELECTRONICOS SERVINORTE E.I.R.L. | e59a69b4 |\n"
+            "   | AXXIS               | AXXIS A Y M SERVICIO TECNICO S.A.C.  | 5b28dbba   |\n"
+            "   | FAZZIO              | FAZZIO SERVICIOS INTEGRALES E.I.R.L. | 24142d3e   |\n"
+            "   | LUIS MUÑOZ          | MUÑOZ ARMAS LUIS ELOY                | 81ffa8ea   |\n"
+            "   | VERGARAY            | VERGARAY SANTIAGO LUIS ANTONIO       | 940cc4c2   |\n"
+            "   | MIGUEL GUERRERO     | GUERRERO MORALES MIGUEL              | 0c412884   |\n"
+            "   REGLA CRÍTICA DE FILTRADO: Si el usuario dice 'técnicos SOLE', 'técnicos propios', 'CAS SOLE' o 'técnicos internos', filtra SIEMPRE con: IdCAS = 'e9a5a911' (que corresponde a MT INDUSTRIAL S.A.C.). NUNCA uses CAS LIKE '%SOLE%' porque ese patrón no existe en la base de datos.\n\n"
             "5. TABLA DE CANCELACIONES: 'dbo.GAC_APP_TB_CANCELACIONES'\n"
             "   - ID_Cancelados (varchar), Ticket (varchar - rel. ServiciosViewSQL.Ticket), Motivo_Cancelacion (varchar), Autorizador_Cancelacion (varchar), Generado_el (datetime), Cancelacion_Correcta (varchar), Estado_Proceso (varchar).\n\n"
             "6. TABLA DE NPS (SATISFACCIÓN): 'dbo.GAC_APP_TB_NPS'\n"
@@ -467,7 +492,7 @@ async def run_deepseek_chat_task(task_id: str, history_messages: List[ChatMessag
         openai_tools = map_to_openai_tools(mcp_tools)
         tool_to_server = {item["tool"].name: item["mcp_server"] for item in mcp_tools}
 
-        max_iterations = 8
+        max_iterations = 12
         iteration = 0
         final_text = ""
 
@@ -479,7 +504,12 @@ async def run_deepseek_chat_task(task_id: str, history_messages: List[ChatMessag
             kwargs = {}
             if openai_tools:
                 kwargs["tools"] = openai_tools
-                kwargs["tool_choice"] = "auto"
+                # After 6 iterations without a final answer, force a text response
+                if iteration >= 6:
+                    kwargs["tool_choice"] = "none"
+                    logger.warning(f"[DEEPSEEK] Iteración {iteration}: forzando respuesta de texto (tool_choice=none) para evitar bucle infinito.")
+                else:
+                    kwargs["tool_choice"] = "auto"
 
             response = client.chat.completions.create(
                 model="deepseek-chat",
