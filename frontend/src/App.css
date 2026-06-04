@@ -476,7 +476,7 @@ h1, h2, h3, .brand-title, .gemini-welcome-title {
 /* Chat Messages Panel */
 .messages-container {
   flex: 1;
-  padding: 24px 24px 120px 24px;
+  padding: 24px 24px 170px 24px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -713,13 +713,13 @@ h1, h2, h3, .brand-title, .gemini-welcome-title {
   left: 0;
   right: 0;
   padding: 0 24px 24px 24px;
-  background: linear-gradient(180deg, rgba(19,19,20,0) 0%, var(--bg-primary) 40%);
+  background: linear-gradient(180deg, rgba(19,19,20,0) 0%, var(--bg-primary) 50%, var(--bg-primary) 100%);
   z-index: 10;
   pointer-events: none;
 }
 
 :root[data-theme='light'] .input-container-fixed {
-  background: linear-gradient(180deg, rgba(240,244,249,0) 0%, var(--bg-primary) 40%);
+  background: linear-gradient(180deg, rgba(240,244,249,0) 0%, var(--bg-primary) 50%, var(--bg-primary) 100%);
 }
 
 .input-max-width-wrapper {
@@ -1098,7 +1098,7 @@ h1, h2, h3, .brand-title, .gemini-welcome-title {
     transform: translateX(0);
   }
   .messages-container {
-    padding-bottom: 140px;
+    padding-bottom: 190px;
   }
 }
 

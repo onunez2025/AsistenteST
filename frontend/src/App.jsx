@@ -75,6 +75,15 @@ const ImageIcon = () => (
 // Base URL for API
 const API_BASE_URL = window.location.hostname === 'localhost' ? 'http://localhost:8000' : '';
 
+// Helper to resolve file URLs safely (prepending local host only for relative paths)
+const getFullUrl = (url) => {
+  if (!url) return '';
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    return url;
+  }
+  return `${API_BASE_URL}${url}`;
+};
+
 // Simple Markdown parser utility
 const parseMarkdown = (text) => {
   if (!text) return '';
@@ -715,7 +724,7 @@ function App() {
               <div className="download-size">Formato: Microsoft Excel (.xlsx)</div>
             </div>
             <a 
-              href={`${API_BASE_URL}${excelUrl}`} 
+              href={getFullUrl(excelUrl)} 
               target="_blank" 
               rel="noopener noreferrer" 
               className="download-link-btn"
@@ -730,13 +739,13 @@ function App() {
             <div className="chart-header-actions">
               <span className="chart-indicator">📊 Gráfico Interactivo</span>
               <div className="chart-action-buttons">
-                <a href={`${API_BASE_URL}${chartUrl}`} target="_blank" rel="noopener noreferrer" className="chart-action-btn">
+                <a href={getFullUrl(chartUrl)} target="_blank" rel="noopener noreferrer" className="chart-action-btn">
                   Abrir ↗
                 </a>
                 <button onClick={() => handleExportPNG(`chart-iframe-${index}`)} className="chart-action-btn">
                   PNG 🖼️
                 </button>
-                <a href={`${API_BASE_URL}${chartUrl}`} download={`grafico_st_${index}.html`} className="chart-action-btn">
+                <a href={getFullUrl(chartUrl)} download={`grafico_st_${index}.html`} className="chart-action-btn">
                   Guardar 💾
                 </a>
               </div>
@@ -744,7 +753,7 @@ function App() {
             <div className="chart-iframe-container">
               <iframe 
                 id={`chart-iframe-${index}`}
-                src={`${API_BASE_URL}${chartUrl}`} 
+                src={getFullUrl(chartUrl)} 
                 title="Gráfico de Servicio Técnico" 
                 className="chart-iframe"
               />
