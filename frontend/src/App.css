@@ -70,6 +70,7 @@ h1, h2, h3, .brand-title, .gemini-welcome-title {
 .app-container {
   display: flex;
   height: 100vh;
+  height: 100dvh;
   width: 100vw;
   background-color: var(--bg-primary);
   overflow: hidden;
@@ -334,9 +335,11 @@ h1, h2, h3, .brand-title, .gemini-welcome-title {
   flex: 1;
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: 100%;
   position: relative;
   background-color: var(--bg-primary);
+  min-width: 0;
+  transition: background-color 0.3s ease;
 }
 
 .chat-header {
@@ -1143,11 +1146,15 @@ h1, h2, h3, .brand-title, .gemini-welcome-title {
 }
 
 @media (max-width: 768px) {
+  .app-container {
+    height: 100dvh;
+  }
   .sidebar {
     position: absolute;
     left: 0;
     top: 0;
-    height: 100vh;
+    height: 100%;
+    height: 100dvh;
     transform: translateX(-100%);
     box-shadow: 4px 0 16px rgba(0,0,0,0.3);
   }
@@ -1155,7 +1162,7 @@ h1, h2, h3, .brand-title, .gemini-welcome-title {
     transform: translateX(0);
   }
   .messages-container {
-    padding-bottom: 190px;
+    padding: 16px 12px 140px 12px;
   }
   .gemini-welcome-title {
     font-size: 26px;
@@ -1165,7 +1172,7 @@ h1, h2, h3, .brand-title, .gemini-welcome-title {
     margin-bottom: 24px;
   }
   .welcome-container {
-    padding: 0 16px 40px 16px;
+    padding: 0 12px 20px 12px;
   }
   .welcome-cards-grid {
     grid-template-columns: 1fr;
@@ -1197,6 +1204,7 @@ h1, h2, h3, .brand-title, .gemini-welcome-title {
     max-width: 100%;
     top: 60px;
     height: calc(100vh - 60px);
+    height: calc(100dvh - 60px);
   }
   .chart-header-actions {
     flex-direction: column;
@@ -1210,6 +1218,27 @@ h1, h2, h3, .brand-title, .gemini-welcome-title {
   .download-link-btn {
     padding: 5px 10px;
     font-size: 11px;
+  }
+  .input-container-fixed {
+    padding: 0 12px 12px 12px;
+  }
+  .input-box-wrapper {
+    padding: 6px 12px;
+    border-radius: 20px;
+  }
+  .login-container {
+    padding: 16px;
+  }
+  .login-card-wrapper {
+    padding: 24px 16px;
+    border-radius: 16px;
+  }
+  .login-title {
+    font-size: 24px;
+    margin-bottom: 4px;
+  }
+  .login-subtitle {
+    margin-bottom: 24px;
   }
 }
 
