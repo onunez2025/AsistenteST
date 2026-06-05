@@ -48,7 +48,8 @@ function App() {
   const [notes, setNotes] = useState([]);
   const [activeNote, setActiveNote] = useState({ id: null, title: '', content: '' });
 
-  // Sidebar dynamic tab
+  // Sidebar navigation and view management
+  const [activeView, setActiveView] = useState('chat'); // 'chat', 'search', 'notebook'
   const [sidebarTab, setSidebarTab] = useState('chats'); // 'chats' or 'library'
   const [activeTaskId, setActiveTaskId] = useState(null);
 
@@ -147,6 +148,7 @@ function App() {
     setActiveChatId(newId);
     setInputText('');
     setFileAttachment(null);
+    setActiveView('chat');
     if (window.innerWidth <= 768) {
       setIsSidebarOpen(false);
     }
@@ -268,6 +270,7 @@ function App() {
     activeChat.messages.push(userMsg);
     setChats([...currentChats]);
     setIsLoading(true);
+    setActiveView('chat'); // Asegurar vista de chat al enviar mensaje
     
     try {
       const response = await fetch(`${API_BASE_URL}/api/chat`, {
@@ -379,23 +382,24 @@ function App() {
     if (activeNote.id) {
       // Update note
       setNotes(prev => prev.map(n => n.id === activeNote.id ? { ...n, title: activeNote.title, content: activeNote.content } : n));
-      toastSuccess("Nota actualizada");
+      toastSuccess("Cuaderno actualizado");
     } else {
       // Add note
       const newNote = {
         id: `note_${Date.now()}`,
-        title: activeNote.title || 'Nota sin título',
+        title: activeNote.title || 'Cuaderno sin título',
         content: activeNote.content,
         updatedAt: new Date().toISOString()
       };
       setNotes(prev => [newNote, ...prev]);
       setActiveNote(prev => ({ ...prev, id: newNote.id }));
-      toastSuccess("Nota guardada con éxito");
+      toastSuccess("Cuaderno guardado con éxito");
     }
   };
 
   const handleNewNote = () => {
     setActiveNote({ id: null, title: '', content: '' });
+    setActiveView('notebook');
   };
 
   const handleDeleteNote = (id, e) => {
@@ -404,13 +408,14 @@ function App() {
     if (activeNote.id === id) {
       handleNewNote();
     }
-    toastSuccess("Nota eliminada");
+    toastSuccess("Cuaderno eliminado");
   };
 
   // Send Note content to the chat input box
   const handleSendNoteToChat = (content) => {
     setInputText(prev => prev + (prev ? '\n' : '') + content);
-    toastInfo("Nota copiada al chat", "Contenido cargado en la caja de entrada.");
+    setActiveView('chat');
+    toastInfo("Cuaderno copiado al chat", "Contenido cargado en la caja de entrada.");
   };
 
   const handleLogout = () => {
@@ -541,6 +546,7 @@ function App() {
         isSidebarOpen={isSidebarOpen}
         setIsSidebarOpen={setIsSidebarOpen}
         chats={chats}
+        setChats={setChats}
         activeChatId={activeChatId}
         setActiveChatId={setActiveChatId}
         handleNewChat={handleNewChat}
@@ -551,46 +557,69 @@ function App() {
         setSidebarTab={setSidebarTab}
         libraryFiles={libraryFiles}
         formatDateTime={formatDateTime}
-      />
-
-      {/* 2. MIDDLE PANEL: Main Chat Area */}
-      <ChatArea
-        isSidebarOpen={isSidebarOpen}
-        setIsSidebarOpen={setIsSidebarOpen}
-        isNotebookOpen={isNotebookOpen}
-        setIsNotebookOpen={setIsNotebookOpen}
-        theme={theme}
-        toggleTheme={toggleTheme}
-        user={user}
-        username={username}
-        handleLogout={handleLogout}
-        activeMessages={activeMessages}
-        isLoading={isLoading}
-        inputText={inputText}
-        setInputText={setInputText}
-        fileAttachment={fileAttachment}
-        setFileAttachment={setFileAttachment}
-        handleSendMessage={handleSendMessage}
-        handleFileSelect={handleFileSelect}
-        isFileUploading={isFileUploading}
-        fileInputRef={fileInputRef}
-        messagesEndRef={messagesEndRef}
-        handleExportPNG={handleExportPNG}
-        getFullUrl={getFullUrl}
-      />
-
-      {/* 3. RIGHT PANEL: Collapsible Notebook (Cuaderno) */}
-      <Notebook
-        activeNote={activeNote}
+        activeView={activeView}
+        setActiveView={setActiveView}
         notes={notes}
-        isNotebookOpen={isNotebookOpen}
-        onSaveNote={handleSaveNote}
-        onDeleteNote={handleDeleteNote}
-        onNewNote={handleNewNote}
-        onSendToChat={handleSendNoteToChat}
+        setNotes={setNotes}
+        activeNote={activeNote}
         setActiveNote={setActiveNote}
-        setIsNotebookOpen={setIsNotebookOpen}
+        handleNewNote={handleNewNote}
+        handleDeleteNote={handleDeleteNote}
+        user={user}
+        handleLogout={handleLogout}
       />
+
+      {/* 2. MIDDLE PANEL: Main Area (Conditionally render Chat/Search or Notebook) */}
+      {activeView === 'notebook' ? (
+        <Notebook
+          activeNote={activeNote}
+          notes={notes}
+          isNotebookOpen={true}
+          onSaveNote={handleSaveNote}
+          onDeleteNote={handleDeleteNote}
+          onNewNote={handleNewNote}
+          onSendToChat={handleSendNoteToChat}
+          setActiveNote={setActiveNote}
+          setIsNotebookOpen={(val) => {
+            if (!val) setActiveView('chat');
+          }}
+          isSidebarOpen={isSidebarOpen}
+          setIsSidebarOpen={setIsSidebarOpen}
+          toggleTheme={toggleTheme}
+          theme={theme}
+          user={user}
+          handleLogout={handleLogout}
+        />
+      ) : (
+        <ChatArea
+          isSidebarOpen={isSidebarOpen}
+          setIsSidebarOpen={setIsSidebarOpen}
+          activeView={activeView}
+          setActiveView={setActiveView}
+          theme={theme}
+          toggleTheme={toggleTheme}
+          user={user}
+          username={username}
+          handleLogout={handleLogout}
+          activeMessages={activeMessages}
+          isLoading={isLoading}
+          inputText={inputText}
+          setInputText={setInputText}
+          fileAttachment={fileAttachment}
+          setFileAttachment={setFileAttachment}
+          handleSendMessage={handleSendMessage}
+          handleFileSelect={handleFileSelect}
+          isFileUploading={isFileUploading}
+          fileInputRef={fileInputRef}
+          messagesEndRef={messagesEndRef}
+          handleExportPNG={handleExportPNG}
+          getFullUrl={getFullUrl}
+          chats={chats}
+          setActiveChatId={setActiveChatId}
+          handleDeleteChat={handleDeleteChat}
+          formatDateTime={formatDateTime}
+        />
+      )}
     </div>
   );
 }
