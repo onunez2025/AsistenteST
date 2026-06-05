@@ -1085,6 +1085,53 @@ h1, h2, h3, .brand-title, .gemini-welcome-title {
   }
 }
 
+/* Sidebar User Card */
+.sidebar-user-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+}
+.sidebar-user-details {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sidebar-user-avatar {
+  font-size: 16px;
+}
+.sidebar-user-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 180px;
+}
+.sidebar-logout-btn {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 4px 8px;
+  border-radius: 12px;
+  cursor: pointer;
+  width: 100%;
+  text-align: center;
+  transition: all 0.2s;
+}
+.sidebar-logout-btn:hover {
+  color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.3);
+  background: rgba(239, 68, 68, 0.05);
+}
+
 @media (max-width: 768px) {
   .sidebar {
     position: absolute;
@@ -1117,6 +1164,23 @@ h1, h2, h3, .brand-title, .gemini-welcome-title {
   .welcome-card {
     min-height: auto;
     padding: 12px 16px;
+  }
+  .header-user-profile {
+    display: none !important;
+  }
+  .chat-title {
+    font-size: 13.5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 150px;
+  }
+  .chat-subtitle {
+    display: none !important;
+  }
+  .chat-header {
+    padding: 0 12px;
+    gap: 8px;
   }
 }
 

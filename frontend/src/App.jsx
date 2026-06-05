@@ -1038,6 +1038,19 @@ function App() {
         )}
 
         <div className="sidebar-footer">
+          {user && (
+            <div className="sidebar-user-card">
+              <div className="sidebar-user-details">
+                <span className="sidebar-user-avatar">👤</span>
+                <span className="sidebar-user-name" title={user.full_name || username}>
+                  {user.full_name || username}
+                </span>
+              </div>
+              <button className="sidebar-logout-btn" onClick={handleLogout}>
+                Cerrar Sesión
+              </button>
+            </div>
+          )}
           <div className="status-badge">
             <div className="status-dot"></div>
             <span>Conectado a Azure SQL & C4C</span>
