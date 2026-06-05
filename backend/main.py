@@ -343,6 +343,39 @@ async def call_mcp_tool(server_name: str, name: str, arguments: Dict[str, Any]) 
 # Database of active background tasks
 active_tasks: Dict[str, Dict[str, Any]] = {}
 
+def parse_dsml_tool_calls(content: str) -> list:
+    """Parses DeepSeek's raw DSML tool call tags in text content."""
+    tool_calls = []
+    try:
+        # Normalize spaces and slashes inside DSML tag patterns
+        normalized = content
+        normalized = re.sub(r'<\s*\|\s*\|\s*DSML\s*\|\s*\|\s*tool_calls\s*>', '<||DSML||tool_calls>', normalized)
+        normalized = re.sub(r'</\s*\|\s*\|\s*DSML\s*\|\s*\|\s*tool_calls\s*>', '</||DSML||tool_calls>', normalized)
+        normalized = re.sub(r'<\s*\|\s*\|\s*DSML\s*\|\s*\|\s*invoke', '<||DSML||invoke', normalized)
+        normalized = re.sub(r'</\s*\|\s*\|\s*DSML\s*\|\s*\|\s*invoke\s*>', '</||DSML||invoke>', normalized)
+        normalized = re.sub(r'<\s*\|\s*\|\s*DSML\s*\|\s*\|\s*parameter', '<||DSML||parameter', normalized)
+        
+        # Find all invoke blocks
+        invoke_pattern = r'<\|\|DSML\|\|invoke name="([^"]+)">([\s\S]+?)(?:</\|\|DSML\|\|invoke>|$)'
+        invokes = re.findall(invoke_pattern, normalized)
+        
+        for tool_name, body in invokes:
+            # Extract parameters within this invoke block
+            param_pattern = r'<\|\|DSML\|\|parameter name="([^"]+)"[^>]*>([\s\S]+?)(?=<\|\|DSML\|\|parameter|</\|\|DSML\|\|invoke>|$)'
+            params = re.findall(param_pattern, body)
+            
+            arguments = {}
+            for param_name, param_val in params:
+                arguments[param_name.strip()] = param_val.strip()
+                
+            tool_calls.append({
+                "name": tool_name.strip(),
+                "arguments": arguments
+            })
+    except Exception as e:
+        logger.error(f"Error parsing DSML tool calls: {e}")
+    return tool_calls
+
 async def run_deepseek_chat_task(task_id: str, history_messages: List[ChatMessage], latest_message: ChatMessage):
     """Executes the chat completions with DeepSeek, resolving tools via local MCP servers."""
     try:
@@ -467,7 +500,8 @@ async def run_deepseek_chat_task(task_id: str, history_messages: List[ChatMessag
             "6. Cuando te pidan gráficos o estadísticas comparativas, usa 'generar_grafico'. En tu respuesta al usuario, debes incluir la etiqueta [EmbedChart:URL] tal y como la devuelve la herramienta (sin modificarla, sin quitarle los corchetes y sin envolverla en enlaces markdown) para que la interfaz pueda renderizar el gráfico interactivo.\n"
             "7. Si te preguntan por un ID de ticket específico, puedes consultar en tiempo real con 'obtener_ticket_c4c_tiempo_real'.\n"
             "8. Escribe respuestas bien estructuradas con tablas en Markdown si es pertinente.\n"
-            "9. ARCHIVOS Y DOCUMENTOS ADJUNTOS: Si el usuario adjunta un archivo (PDF, Excel, CSV, Imagen, etc.), el backend lo procesará de forma invisible y te proveerá el contenido de texto extraído o su estructura tabular al final del mensaje del usuario. Utiliza esa información adjunta tal y como si el usuario la hubiese escrito para responder a sus consultas, realizar cálculos o resumir su contenido."
+            "9. ARCHIVOS Y DOCUMENTOS ADJUNTOS: Si el usuario adjunta un archivo (PDF, Excel, CSV, Imagen, etc.), el backend lo procesará de forma invisible y te proveerá el contenido de texto extraído o su estructura tabular al final del mensaje del usuario. Utiliza esa información adjunta tal y como si el usuario la hubiese escrito para responder a sus consultas, realizar cálculos o resumir su contenido.\n"
+            "10. APRENDIZAJE Y MEMORIA COMPARTIDA: Puedes aprender de las conversaciones y recordar lógicas de negocio, cálculos de indicadores, fórmulas y cruces de tablas complejos. Si un usuario te enseña cómo calcular un indicador nuevo, qué lógica usar para cruzar tablas o reglas de negocio internas, debes guardarla inmediatamente llamando a la herramienta 'guardar_regla_negocio'. En futuras consultas (en cualquier chat o con cualquier usuario) sobre cálculos, indicadores complejos o lógicas que no recuerdes de forma nativa, debes buscar primero en la memoria usando la herramienta 'buscar_reglas_negocio' antes de responder o formular tu consulta SQL final."
         )
 
         client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
@@ -519,50 +553,86 @@ async def run_deepseek_chat_task(task_id: str, history_messages: List[ChatMessag
 
             response_message = response.choices[0].message
             tool_calls = response_message.tool_calls
+            content_text = response_message.content or ""
 
-            if not tool_calls:
-                final_text = response_message.content or ""
+            # Check for raw DSML tags inside the content_text
+            dsml_calls = []
+            if "DSML" in content_text and "invoke" in content_text:
+                logger.warning("[DEEPSEEK] Detectado formato crudo DSML en el contenido. Parseando...")
+                dsml_calls = parse_dsml_tool_calls(content_text)
+
+            if not tool_calls and not dsml_calls:
+                final_text = content_text
                 break
 
-            # Add assistant message with tool calls to history
-            assistant_msg = {
-                "role": "assistant",
-                "content": response_message.content or ""
-            }
-            assistant_msg["tool_calls"] = [
-                {
-                    "id": tc.id,
-                    "type": tc.type,
-                    "function": {
-                        "name": tc.function.name,
-                        "arguments": tc.function.arguments
-                    }
+            # 1. Process Standard Tool Calls
+            if tool_calls:
+                # Add assistant message with tool calls to history
+                assistant_msg = {
+                    "role": "assistant",
+                    "content": content_text
                 }
-                for tc in tool_calls
-            ]
-            messages.append(assistant_msg)
+                assistant_msg["tool_calls"] = [
+                    {
+                        "id": tc.id,
+                        "type": tc.type,
+                        "function": {
+                            "name": tc.function.name,
+                            "arguments": tc.function.arguments
+                        }
+                    }
+                    for tc in tool_calls
+                ]
+                messages.append(assistant_msg)
 
-            # Process all tool calls requested
-            for tool_call in tool_calls:
-                function_name = tool_call.function.name
-                function_args = json.loads(tool_call.function.arguments)
-                logger.info(f"[DEEPSEEK] Solicitud de herramienta '{function_name}' con args: {function_args}")
+                # Process all tool calls requested
+                for tool_call in tool_calls:
+                    function_name = tool_call.function.name
+                    function_args = json.loads(tool_call.function.arguments)
+                    logger.info(f"[DEEPSEEK] Solicitud de herramienta '{function_name}' con args: {function_args}")
 
-                server_name = tool_to_server.get(function_name)
-                if server_name:
-                    tool_result = await call_mcp_tool(server_name, function_name, function_args)
-                else:
-                    tool_result = f"Error: La herramienta '{function_name}' no existe en ningún servidor MCP local."
+                    server_name = tool_to_server.get(function_name)
+                    if server_name:
+                        tool_result = await call_mcp_tool(server_name, function_name, function_args)
+                    else:
+                        tool_result = f"Error: La herramienta '{function_name}' no existe en ningún servidor MCP local."
 
-                logger.info(f"[DEEPSEEK] Resultado de la herramienta (truncado): {tool_result[:150]}...")
-                
-                # Append tool result to history
+                    logger.info(f"[DEEPSEEK] Resultado de la herramienta (truncado): {tool_result[:150]}...")
+                    
+                    # Append tool result to history
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": tool_call.id,
+                        "name": function_name,
+                        "content": tool_result
+                    })
+
+            # 2. Process Raw DSML Tool Calls (Manual Fallback)
+            elif dsml_calls:
                 messages.append({
-                    "role": "tool",
-                    "tool_call_id": tool_call.id,
-                    "name": function_name,
-                    "content": tool_result
+                    "role": "assistant",
+                    "content": content_text
                 })
+                
+                for dc in dsml_calls:
+                    function_name = dc["name"]
+                    function_args = dc["arguments"]
+                    logger.info(f"[DEEPSEEK] [DSML FALLBACK] Solicitud de herramienta '{function_name}' con args: {function_args}")
+                    
+                    server_name = tool_to_server.get(function_name)
+                    if server_name:
+                        tool_result = await call_mcp_tool(server_name, function_name, function_args)
+                    else:
+                        tool_result = f"Error: La herramienta '{function_name}' no existe en ningún servidor MCP local."
+                        
+                    logger.info(f"[DEEPSEEK] [DSML FALLBACK] Resultado de la herramienta (truncado): {tool_result[:150]}...")
+                    
+                    # Append tool result as system feedback using 'user' role
+                    messages.append({
+                        "role": "user",
+                        "content": f"[SISTEMA: Resultado de la ejecución de la herramienta '{function_name}':]\n{tool_result}"
+                    })
+
         else:
             final_text = "La consulta se ha detenido por exceder el número máximo de ejecuciones de herramientas consecutivas."
 

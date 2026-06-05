@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 from fastmcp import FastMCP
 from azure.storage.blob import BlobServiceClient, ContentSettings
 from typing import Optional
+import json
 
 # Setup logging to stderr because stdout is used for MCP stdio protocol communication
 logging.basicConfig(
@@ -260,6 +261,93 @@ def generar_grafico(sql_query: str, tipo_grafico: str, columna_x: str, columna_y
     except Exception as e:
         logger.error(f"Error generando gráfico en MCP: {e}")
         return f"Error al generar el gráfico: {str(e)}"
+
+SHARED_KNOWLEDGE_FILE = os.path.join(BACKEND_DIR, "shared_knowledge.json")
+
+@mcp.tool()
+def guardar_regla_negocio(tema: str, explicacion: str, consulta_sql: Optional[str] = None) -> str:
+    """
+    Guarda una regla de negocio, fórmula, cruce de tablas, método de cálculo de indicador 
+    o instrucción enseñada por el usuario para que el asistente pueda recordarla y usarla 
+    en el futuro en cualquier conversación.
+    
+    Args:
+        tema: El nombre del indicador, regla o tema (ej. 'Cálculo de NPS', 'Join de técnicos propios').
+        explicacion: La explicación detallada de la regla, fórmula o lógica.
+        consulta_sql: Un ejemplo de consulta SQL opcional que represente la regla.
+    """
+    logger.info(f"[MCP DB] guardar_regla_negocio: {tema}")
+    try:
+        data = []
+        if os.path.exists(SHARED_KNOWLEDGE_FILE):
+            try:
+                with open(SHARED_KNOWLEDGE_FILE, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            except Exception:
+                data = []
+        
+        nueva_regla = {
+            "tema": tema,
+            "explicacion": explicacion,
+            "consulta_sql": consulta_sql,
+            "fecha_creacion": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }
+        
+        # Avoid duplicate topics (update if already exists)
+        exists = False
+        for i, item in enumerate(data):
+            if item["tema"].lower().strip() == tema.lower().strip():
+                data[i] = nueva_regla
+                exists = True
+                break
+        
+        if not exists:
+            data.append(nueva_regla)
+            
+        with open(SHARED_KNOWLEDGE_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+            
+        return f"Regla de negocio sobre '{tema}' guardada exitosamente en la memoria compartida."
+    except Exception as e:
+        logger.error(f"Error en guardar_regla_negocio: {e}")
+        return f"Error al guardar la regla de negocio: {str(e)}"
+
+@mcp.tool()
+def buscar_reglas_negocio(termino_busqueda: Optional[str] = None) -> str:
+    """
+    Busca e investiga en la memoria compartida las reglas de negocio, fórmulas o lógicas 
+    que los usuarios han enseñado previamente al asistente. Úsala siempre que te pregunten 
+    por un cálculo, indicador personalizado o cruce de tablas del cual no recuerdes la lógica exacta.
+    
+    Args:
+        termino_busqueda: Término de búsqueda opcional para filtrar los temas. Si es vacío, devuelve todas las reglas.
+    """
+    logger.info(f"[MCP DB] buscar_reglas_negocio: {termino_busqueda}")
+    try:
+        if not os.path.exists(SHARED_KNOWLEDGE_FILE):
+            return "No hay ninguna regla de negocio guardada en la memoria compartida aún."
+            
+        with open(SHARED_KNOWLEDGE_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            
+        if not data:
+            return "No hay ninguna regla de negocio registrada en la memoria."
+            
+        if termino_busqueda:
+            term = termino_busqueda.lower().strip()
+            filtrados = [
+                item for item in data 
+                if term in item["tema"].lower() or term in item["explicacion"].lower() or (item["consulta_sql"] and term in item["consulta_sql"].lower())
+            ]
+            if not filtrados:
+                return f"No se encontraron reglas de negocio asociadas al término '{termino_busqueda}'."
+            return json.dumps(filtrados, ensure_ascii=False, indent=2)
+        else:
+            return json.dumps(data, ensure_ascii=False, indent=2)
+            
+    except Exception as e:
+        logger.error(f"Error en buscar_reglas_negocio: {e}")
+        return f"Error al buscar reglas de negocio: {str(e)}"
 
 if __name__ == "__main__":
     mcp.run()
