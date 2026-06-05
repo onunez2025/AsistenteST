@@ -150,6 +150,9 @@ function App() {
     if (window.innerWidth <= 768) {
       setIsSidebarOpen(false);
     }
+    if (window.innerWidth <= 1024) {
+      setIsNotebookOpen(false);
+    }
     toastInfo("Conversación creada", "Inicia una nueva consulta");
   };
 
@@ -221,6 +224,10 @@ function App() {
   const handleSendMessage = async (textToSend) => {
     const text = textToSend || inputText;
     if (!text.trim() && !fileAttachment) return;
+    
+    if (window.innerWidth <= 1024) {
+      setIsNotebookOpen(false);
+    }
     
     setInputText('');
     const attachmentToSend = fileAttachment;
