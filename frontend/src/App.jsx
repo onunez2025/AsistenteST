@@ -125,7 +125,7 @@ const parseMarkdown = (text) => {
     if (line.startsWith('|') && line.endsWith('|')) {
       if (!inTable) {
         inTable = true;
-        tableHtml = '<table>';
+        tableHtml = '<div class="table-responsive"><table>';
       }
       const cells = line.split('|').map(c => c.trim()).filter((c, idx, arr) => idx > 0 && idx < arr.length - 1);
       
@@ -144,7 +144,7 @@ const parseMarkdown = (text) => {
     } else {
       if (inTable) {
         inTable = false;
-        tableHtml += '</table>';
+        tableHtml += '</table></div>';
         newLines.push(tableHtml);
       }
       newLines.push(lines[i]);
@@ -152,7 +152,7 @@ const parseMarkdown = (text) => {
   }
   
   if (inTable) {
-    tableHtml += '</table>';
+    tableHtml += '</table></div>';
     newLines.push(tableHtml);
   }
   

@@ -683,11 +683,20 @@ h1, h2, h3, .brand-title, .gemini-welcome-title {
 }
 
 /* Markdown Table */
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: 16px 0;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+}
+
 .message-content table {
   width: 100%;
   border-collapse: collapse;
-  margin: 16px 0;
   font-size: 13.5px;
+  min-width: 500px; /* Ensure table has a readable width on mobile when scrolling */
 }
 
 .message-content th, .message-content td {
