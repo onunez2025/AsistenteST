@@ -1100,6 +1100,24 @@ h1, h2, h3, .brand-title, .gemini-welcome-title {
   .messages-container {
     padding-bottom: 190px;
   }
+  .gemini-welcome-title {
+    font-size: 26px;
+  }
+  .gemini-welcome-subtitle {
+    font-size: 15px;
+    margin-bottom: 24px;
+  }
+  .welcome-container {
+    padding: 0 16px 40px 16px;
+  }
+  .welcome-cards-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .welcome-card {
+    min-height: auto;
+    padding: 12px 16px;
+  }
 }
 
 /* ──────────────────────────────────────────

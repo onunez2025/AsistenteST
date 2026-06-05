@@ -915,7 +915,7 @@ function App() {
   return (
     <div className="app-container">
       {/* 1. LEFT PANEL: Sidebar */}
-      <div className={`sidebar ${isSidebarOpen ? '' : 'closed'}`}>
+      <div className={`sidebar ${isSidebarOpen ? 'open' : 'closed'}`}>
         <div className="sidebar-header">
           <button className="sidebar-toggle-btn" onClick={() => setIsSidebarOpen(false)} title="Cerrar menú">
             <MenuIcon />
