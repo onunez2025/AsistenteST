@@ -32,13 +32,17 @@ from mcp.client.stdio import stdio_client
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("chatbot-st")
 
-# Load environment variables
-if os.path.exists(".env"):
-    load_dotenv(".env")
-elif os.path.exists("../.env"):
-    load_dotenv("../.env")
+# Load environment variables dynamically using absolute paths
+current_dir = os.path.dirname(os.path.abspath(__file__))
+env_in_backend = os.path.join(current_dir, ".env")
+env_in_root = os.path.join(os.path.dirname(current_dir), ".env")
+
+if os.path.exists(env_in_backend):
+    load_dotenv(env_in_backend, override=True)
+elif os.path.exists(env_in_root):
+    load_dotenv(env_in_root, override=True)
 else:
-    load_dotenv()
+    load_dotenv(override=True)
 
 # SQL Azure Config
 SQL_SERVER = os.getenv("SQL_SERVER")
@@ -343,6 +347,25 @@ async def call_mcp_tool(server_name: str, name: str, arguments: Dict[str, Any]) 
 # Database of active background tasks
 active_tasks: Dict[str, Dict[str, Any]] = {}
 
+class MockFunction:
+    def __init__(self, name: str, arguments: str):
+        self.name = name
+        self.arguments = arguments
+
+class MockToolCall:
+    def __init__(self, id: str, type: str, name: str, arguments: str):
+        self.id = id
+        self.type = type
+        self.function = MockFunction(name, arguments)
+
+def remove_dsml_blocks(content: str) -> str:
+    """Removes raw DSML tool call blocks from the text content."""
+    normalized = content
+    normalized = re.sub(r'<\s*\|\s*\|\s*DSML\s*\|\s*\|\s*tool_calls\s*>', '<||DSML||tool_calls>', normalized)
+    normalized = re.sub(r'</\s*\|\s*\|\s*DSML\s*\|\s*\|\s*tool_calls\s*>', '</||DSML||tool_calls>', normalized)
+    cleaned = re.sub(r'<\|\|DSML\|\|tool_calls>[\s\S]*?</\|\|DSML\|\|tool_calls>', '', normalized)
+    return cleaned.strip()
+
 def parse_dsml_tool_calls(content: str) -> list:
     """Parses DeepSeek's raw DSML tool call tags in text content."""
     tool_calls = []
@@ -354,14 +377,15 @@ def parse_dsml_tool_calls(content: str) -> list:
         normalized = re.sub(r'<\s*\|\s*\|\s*DSML\s*\|\s*\|\s*invoke', '<||DSML||invoke', normalized)
         normalized = re.sub(r'</\s*\|\s*\|\s*DSML\s*\|\s*\|\s*invoke\s*>', '</||DSML||invoke>', normalized)
         normalized = re.sub(r'<\s*\|\s*\|\s*DSML\s*\|\s*\|\s*parameter', '<||DSML||parameter', normalized)
+        normalized = re.sub(r'</\s*\|\s*\|\s*DSML\s*\|\s*\|\s*parameter\s*>', '</||DSML||parameter>', normalized)
         
         # Find all invoke blocks
         invoke_pattern = r'<\|\|DSML\|\|invoke name="([^"]+)">([\s\S]+?)(?:</\|\|DSML\|\|invoke>|$)'
         invokes = re.findall(invoke_pattern, normalized)
         
         for tool_name, body in invokes:
-            # Extract parameters within this invoke block
-            param_pattern = r'<\|\|DSML\|\|parameter name="([^"]+)"[^>]*>([\s\S]+?)(?=<\|\|DSML\|\|parameter|</\|\|DSML\|\|invoke>|$)'
+            # Extract parameters within this invoke block using the normalized closing tag
+            param_pattern = r'<\|\|DSML\|\|parameter name="([^"]+)"[^>]*>([\s\S]+?)</\|\|DSML\|\|parameter>'
             params = re.findall(param_pattern, body)
             
             arguments = {}
@@ -375,6 +399,7 @@ def parse_dsml_tool_calls(content: str) -> list:
     except Exception as e:
         logger.error(f"Error parsing DSML tool calls: {e}")
     return tool_calls
+
 
 async def run_deepseek_chat_task(task_id: str, history_messages: List[ChatMessage], latest_message: ChatMessage):
     """Executes the chat completions with DeepSeek, resolving tools via local MCP servers."""
@@ -560,78 +585,68 @@ async def run_deepseek_chat_task(task_id: str, history_messages: List[ChatMessag
             if "DSML" in content_text and "invoke" in content_text:
                 logger.warning("[DEEPSEEK] Detectado formato crudo DSML en el contenido. Parseando...")
                 dsml_calls = parse_dsml_tool_calls(content_text)
+                if dsml_calls:
+                    content_text = remove_dsml_blocks(content_text)
 
-            if not tool_calls and not dsml_calls:
+            # If DSML calls were parsed, convert them to MockToolCall objects and merge with tool_calls
+            if dsml_calls:
+                mock_tool_calls = []
+                for idx, dc in enumerate(dsml_calls):
+                    call_id = f"call_dsml_{idx}_{uuid.uuid4().hex[:8]}"
+                    mock_tool_calls.append(MockToolCall(
+                        id=call_id,
+                        type="function",
+                        name=dc["name"],
+                        arguments=json.dumps(dc["arguments"])
+                    ))
+                if not tool_calls:
+                    tool_calls = mock_tool_calls
+                else:
+                    tool_calls = list(tool_calls) + mock_tool_calls
+
+            if not tool_calls:
                 final_text = content_text
                 break
 
-            # 1. Process Standard Tool Calls
-            if tool_calls:
-                # Add assistant message with tool calls to history
-                assistant_msg = {
-                    "role": "assistant",
-                    "content": content_text
-                }
-                assistant_msg["tool_calls"] = [
-                    {
-                        "id": tc.id,
-                        "type": tc.type,
-                        "function": {
-                            "name": tc.function.name,
-                            "arguments": tc.function.arguments
-                        }
+            # Add assistant message with tool calls to history
+            assistant_msg = {
+                "role": "assistant",
+                "content": content_text
+            }
+            assistant_msg["tool_calls"] = [
+                {
+                    "id": tc.id,
+                    "type": tc.type,
+                    "function": {
+                        "name": tc.function.name,
+                        "arguments": tc.function.arguments
                     }
-                    for tc in tool_calls
-                ]
-                messages.append(assistant_msg)
+                }
+                for tc in tool_calls
+            ]
+            messages.append(assistant_msg)
 
-                # Process all tool calls requested
-                for tool_call in tool_calls:
-                    function_name = tool_call.function.name
-                    function_args = json.loads(tool_call.function.arguments)
-                    logger.info(f"[DEEPSEEK] Solicitud de herramienta '{function_name}' con args: {function_args}")
+            # Process all tool calls requested
+            for tool_call in tool_calls:
+                function_name = tool_call.function.name
+                function_args = json.loads(tool_call.function.arguments)
+                logger.info(f"[DEEPSEEK] Solicitud de herramienta '{function_name}' con args: {function_args}")
 
-                    server_name = tool_to_server.get(function_name)
-                    if server_name:
-                        tool_result = await call_mcp_tool(server_name, function_name, function_args)
-                    else:
-                        tool_result = f"Error: La herramienta '{function_name}' no existe en ningún servidor MCP local."
+                server_name = tool_to_server.get(function_name)
+                if server_name:
+                    tool_result = await call_mcp_tool(server_name, function_name, function_args)
+                else:
+                    tool_result = f"Error: La herramienta '{function_name}' no existe en ningún servidor MCP local."
 
-                    logger.info(f"[DEEPSEEK] Resultado de la herramienta (truncado): {tool_result[:150]}...")
-                    
-                    # Append tool result to history
-                    messages.append({
-                        "role": "tool",
-                        "tool_call_id": tool_call.id,
-                        "name": function_name,
-                        "content": tool_result
-                    })
-
-            # 2. Process Raw DSML Tool Calls (Manual Fallback)
-            elif dsml_calls:
-                messages.append({
-                    "role": "assistant",
-                    "content": content_text
-                })
+                logger.info(f"[DEEPSEEK] Resultado de la herramienta (truncado): {tool_result[:150]}...")
                 
-                for dc in dsml_calls:
-                    function_name = dc["name"]
-                    function_args = dc["arguments"]
-                    logger.info(f"[DEEPSEEK] [DSML FALLBACK] Solicitud de herramienta '{function_name}' con args: {function_args}")
-                    
-                    server_name = tool_to_server.get(function_name)
-                    if server_name:
-                        tool_result = await call_mcp_tool(server_name, function_name, function_args)
-                    else:
-                        tool_result = f"Error: La herramienta '{function_name}' no existe en ningún servidor MCP local."
-                        
-                    logger.info(f"[DEEPSEEK] [DSML FALLBACK] Resultado de la herramienta (truncado): {tool_result[:150]}...")
-                    
-                    # Append tool result as system feedback using 'user' role
-                    messages.append({
-                        "role": "user",
-                        "content": f"[SISTEMA: Resultado de la ejecución de la herramienta '{function_name}':]\n{tool_result}"
-                    })
+                # Append tool result to history
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tool_call.id,
+                    "name": function_name,
+                    "content": tool_result
+                })
 
         else:
             final_text = "La consulta se ha detenido por exceder el número máximo de ejecuciones de herramientas consecutivas."

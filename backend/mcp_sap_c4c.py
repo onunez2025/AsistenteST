@@ -14,13 +14,17 @@ logging.basicConfig(
 )
 logger = logging.getLogger("mcp-sap-c4c")
 
-# Load environment variables
-if os.path.exists(".env"):
-    load_dotenv(".env")
-elif os.path.exists("../.env"):
-    load_dotenv("../.env")
+# Load environment variables dynamically using absolute paths
+current_dir = os.path.dirname(os.path.abspath(__file__))
+env_in_backend = os.path.join(current_dir, ".env")
+env_in_root = os.path.join(os.path.dirname(current_dir), ".env")
+
+if os.path.exists(env_in_backend):
+    load_dotenv(env_in_backend, override=True)
+elif os.path.exists(env_in_root):
+    load_dotenv(env_in_root, override=True)
 else:
-    load_dotenv()
+    load_dotenv(override=True)
 
 SAP_BASE_URL = os.getenv("SAP_BASE_URL")
 SAP_USER = os.getenv("SAP_USER")
