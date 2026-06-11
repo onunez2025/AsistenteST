@@ -91,5 +91,149 @@ def obtener_ticket_c4c_tiempo_real(ticket_id: str) -> str:
         logger.error(f"Error en obtener_ticket_c4c_tiempo_real: {e}")
         return f"Error al consultar SAP C4C en el servidor MCP: {str(e)}"
 
+@mcp.tool()
+def consultar_tickets_c4c_por_tienda_y_fecha(tienda_abreviatura: str, fecha_inicio: str, fecha_fin: str) -> str:
+    """
+    Consulta tickets en SAP C4C vía OData para un lugar de compra/tienda y un rango de fechas de creación.
+    Utiliza esta herramienta siempre que te pregunten por tickets de una tienda (ej. Promart, Sodimac, Hiraoka, etc.)
+    creados en un rango de fechas.
+
+    Args:
+        tienda_abreviatura: Nombre o abreviatura del lugar de compra (ej. 'Promart', 'Sodimac', 'Hiraoka').
+        fecha_inicio: Fecha de inicio en formato 'YYYY-MM-DD' (ej. '2026-05-01').
+        fecha_fin: Fecha de fin en formato 'YYYY-MM-DD' (ej. '2026-05-31').
+    """
+    from datetime import datetime
+    logger.info(f"[MCP TOOL] consultar_tickets_c4c_por_tienda_y_fecha: {tienda_abreviatura} de {fecha_inicio} a {fecha_fin}")
+
+    if not SAP_BASE_URL or not SAP_USER or not SAP_PASSWORD:
+        return "Error: Las credenciales de SAP C4C no están configuradas."
+
+    STORE_MAP = {
+        "promart": ["2540", "4"],
+        "sodimac": ["3", "3348"],
+        "hiraoka": ["3", "2220", "46"],
+        "maestro": ["1311", "743", "1498", "2268", "3005", "3008", "3034", "3032"],
+        "falabella": ["144", "177", "3101", "3807", "1527", "321", "1389", "1529", "171"],
+        "cassinelli": ["2458", "3381", "2457", "309", "293", "303"],
+        "ripley": ["3414", "3413", "180", "2548", "181"],
+        "calidda": ["3977"],
+        "tottus": ["3030", "934", "3046", "2444", "926"],
+        "oechsle": ["529", "487", "1836", "3452"],
+        "plaza vea": ["511", "149", "131", "143", "133", "3827"]
+    }
+
+    name_lower = tienda_abreviatura.lower().strip()
+    matched_codes = []
+    
+    # 1. Look up in predefined map
+    for key, codes in STORE_MAP.items():
+        if key in name_lower or name_lower in key:
+            matched_codes.extend(codes)
+
+    # 2. Dynamic lookup fallback using non-forbidden table GAC_APP_TB_TICKETS
+    if not matched_codes:
+        logger.info(f"Store '{tienda_abreviatura}' not in predefined map. Performing fallback database lookup...")
+        try:
+            import pyodbc
+            SQL_SERVER = os.getenv("SQL_SERVER")
+            SQL_DATABASE = os.getenv("SQL_DATABASE")
+            SQL_USER = os.getenv("SQL_USER")
+            SQL_PASSWORD = os.getenv("SQL_PASSWORD")
+            
+            if SQL_SERVER and SQL_DATABASE and SQL_USER and SQL_PASSWORD:
+                conn_str = (
+                    f"DRIVER={{ODBC Driver 17 for SQL Server}};"
+                    f"SERVER={SQL_SERVER};"
+                    f"DATABASE={SQL_DATABASE};"
+                    f"UID={SQL_USER};"
+                    f"PWD={SQL_PASSWORD};"
+                    f"Encrypt=yes;"
+                    f"TrustServerCertificate=no;"
+                )
+                conn = pyodbc.connect(conn_str)
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT TOP 10 ID_Ticket FROM dbo.GAC_APP_TB_TICKETS WHERE TIENDA LIKE ? AND ID_Ticket IS NOT NULL",
+                    (f"%{tienda_abreviatura}%",)
+                )
+                rows = cursor.fetchall()
+                conn.close()
+
+                if rows:
+                    headers = {"Accept": "application/json"}
+                    auth = HTTPBasicAuth(SAP_USER, SAP_PASSWORD)
+                    for r in rows:
+                        tid = r[0]
+                        url = f"{SAP_BASE_URL}/ServiceRequestCollection?$filter=ID eq '{tid}'&$select=zIDLugarCompra_SDK&$format=json"
+                        try:
+                            resp = requests.get(url, auth=auth, headers=headers, timeout=5)
+                            if resp.status_code == 200:
+                                res = resp.json().get('d', {}).get('results', [])
+                                if res and res[0].get('zIDLugarCompra_SDK'):
+                                    code = res[0].get('zIDLugarCompra_SDK').lstrip('0') or '0'
+                                    if code not in matched_codes:
+                                        matched_codes.append(code)
+                        except Exception as ex:
+                            logger.error(f"Error querying OData for ticket {tid}: {ex}")
+        except Exception as e:
+            logger.error(f"Error in dynamic store lookup: {e}")
+
+    if not matched_codes:
+        return f"No se pudo determinar el código de SAP C4C para la tienda/lugar de compra '{tienda_abreviatura}'."
+
+    try:
+        # Build filter
+        padded_codes = [code.zfill(60) for code in matched_codes]
+        lugar_filter = " or ".join([f"zIDLugarCompra_SDK eq '{c}'" for c in padded_codes])
+        
+        start_dt = f"{fecha_inicio}T00:00:00Z"
+        end_dt = f"{fecha_fin}T23:59:59Z"
+        
+        filter_query = f"CreationDateTime ge datetimeoffset'{start_dt}' and CreationDateTime le datetimeoffset'{end_dt}' and ({lugar_filter})"
+        
+        url = f"{SAP_BASE_URL}/ServiceRequestCollection?$filter={filter_query}&$select=ID,Name,ServiceRequestLifeCycleStatusCodeText,CreationDateTime,zIDLugarCompra_SDK,zIDEmpresa_SDK,ServicePriorityCodeText&$top=200&$format=json"
+        
+        headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+        }
+        
+        resp = requests.get(
+            url,
+            auth=HTTPBasicAuth(SAP_USER, SAP_PASSWORD),
+            headers=headers,
+            timeout=15
+        )
+        
+        if resp.status_code == 200:
+            data = resp.json()
+            results = data.get("d", {}).get("results", [])
+            if results:
+                # Format output nicely
+                output = [f"Tickets para '{tienda_abreviatura}' ({fecha_inicio} al {fecha_fin}) - Total encontrados en esta vista: {len(results)}:"]
+                for t in results:
+                    raw_date = t.get("CreationDateTime")
+                    date_str = raw_date
+                    if raw_date and "/Date(" in raw_date:
+                        try:
+                            timestamp = int(raw_date.split("(")[1].split(")")[0]) / 1000.0
+                            date_str = datetime.utcfromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
+                        except:
+                            pass
+                    
+                    output.append(
+                        f"- Ticket ID: {t.get('ID')} | Asunto: {t.get('Name')} | Estado: {t.get('ServiceRequestLifeCycleStatusCodeText')} | Creado: {date_str} | Empresa: {t.get('zIDEmpresa_SDK')} | Prioridad: {t.get('ServicePriorityCodeText')}"
+                    )
+                return "\n".join(output)
+            else:
+                return f"No se encontraron tickets en SAP C4C para la tienda '{tienda_abreviatura}' en el rango de fechas {fecha_inicio} al {fecha_fin}."
+        else:
+            return f"Error al conectar con SAP C4C OData: {resp.status_code} - {resp.text}"
+            
+    except Exception as e:
+        logger.error(f"Error en consultar_tickets_c4c_por_tienda_y_fecha: {e}")
+        return f"Error al realizar la consulta en SAP C4C: {str(e)}"
+
 if __name__ == "__main__":
     mcp.run()

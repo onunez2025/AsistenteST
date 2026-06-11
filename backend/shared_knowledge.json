@@ -1,0 +1,8 @@
+[
+  {
+    "tema": "Identificar Lugar de Compra / Tiendas (Promart, Sodimac, Casinelli, Hiraoka, etc.) sin usar GACP_APP ni TBL_C4C_REPORTE_CONTROL",
+    "explicacion": "Está estrictamente prohibido utilizar la tabla 'TBL_C4C_REPORTE_CONTROL' y cualquier tabla con el prefijo 'GACP_APP_TB_' para obtener o filtrar datos por lugar de compra (tienda).\nPara consultar o filtrar tickets de SAP C4C por tienda (ej. Promart, Sodimac, Hiraoka, etc.) y fecha, se debe utilizar la herramienta MCP 'consultar_tickets_c4c_por_tienda_y_fecha'. Esta herramienta mapea la tienda a sus códigos correspondientes en SAP C4C y consulta en tiempo real los tickets vía OData.\nSi el usuario no especifica un rango de fechas, utiliza por defecto los últimos 30 días a partir de la fecha actual de hoy.",
+    "consulta_sql": null,
+    "fecha_creacion": "2026-06-11 11:15:00"
+  }
+]
