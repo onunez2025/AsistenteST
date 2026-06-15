@@ -410,6 +410,13 @@ function App() {
 
   return (
     <div className="app-container">
+      {/* Overlay oscuro para cerrar el sidebar en móvil al tocar fuera */}
+      {isSidebarOpen && (
+        <div
+          className="sidebar-overlay"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
       <Sidebar
         isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}
         chats={chats} setChats={setChats}
