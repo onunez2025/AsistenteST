@@ -760,7 +760,7 @@ h1, h2, h3, .brand-title, .gemini-welcome-title {
 
 .input-row-main {
   display: flex;
-  align-items: center;
+  align-items: flex-end; /* botones siempre alineados al fondo cuando el texto crece */
   gap: 12px;
 }
 
@@ -774,8 +774,13 @@ h1, h2, h3, .brand-title, .gemini-welcome-title {
   resize: none;
   font-family: inherit;
   padding: 8px 0;
-  max-height: 120px;
-  line-height: 1.5;
+  min-height: 24px;      /* altura de 1 línea */
+  max-height: 200px;     /* crece hasta ~8 líneas, luego scrollea */
+  height: auto;
+  line-height: 1.6;
+  overflow-y: auto;
+  word-break: break-word;
+  overscroll-behavior: contain;
 }
 
 .chat-textarea::placeholder {
@@ -1056,6 +1061,13 @@ h1, h2, h3, .brand-title, .gemini-welcome-title {
   gap: 12px;
 }
 
+.typing-text {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-style: italic;
+  animation: fadeIn 0.3s ease;
+}
+
 .typing-dots {
   display: flex;
   gap: 4px;
@@ -1243,8 +1255,15 @@ h1, h2, h3, .brand-title, .gemini-welcome-title {
     padding: 0 12px 12px 12px;
   }
   .input-box-wrapper {
-    padding: 6px 12px;
-    border-radius: 20px;
+    padding: 10px 14px 10px 16px;
+    border-radius: 24px;
+  }
+  .input-row-main {
+    align-items: flex-end;
+  }
+  .chat-textarea {
+    font-size: 15px;   /* ligeramente más grande en móvil para legibilidad */
+    min-height: 26px;
   }
   .login-container {
     padding: 16px;
@@ -2322,7 +2341,7 @@ h1, h2, h3, .brand-title, .gemini-welcome-title {
 .model-select-badge {
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid var(--border-color);
-  color: var(--text-main);
+  color: var(--text-muted);
   padding: 5px 12px;
   border-radius: 16px;
   font-size: 11.5px;
@@ -2330,12 +2349,7 @@ h1, h2, h3, .brand-title, .gemini-welcome-title {
   display: flex;
   align-items: center;
   gap: 6px;
-  cursor: pointer;
-  transition: background-color 0.2s;
-}
-
-.model-select-badge:hover {
-  background: rgba(255, 255, 255, 0.12);
+  user-select: none;
 }
 
 .model-caret {
@@ -2419,6 +2433,58 @@ h1, h2, h3, .brand-title, .gemini-welcome-title {
 
 .send-btn.active:hover {
   background-color: rgba(195, 166, 255, 0.1) !important;
+}
+
+/* Botón de detener generación */
+.stop-btn {
+  color: #fff !important;
+  background-color: #ef4444 !important;
+  opacity: 1;
+  cursor: pointer;
+  border-radius: 6px !important;
+  transition: all 0.2s;
+}
+
+.stop-btn:hover {
+  background-color: #dc2626 !important;
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.4);
+}
+
+/* Cursor parpadeante al final del streaming */
+.streaming-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  background-color: var(--accent-indigo);
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  animation: blink 0.8s step-end infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+
+/* Mensaje en modo streaming — sin animación de entrada para que no reaparezca con cada token */
+.streaming-message {
+  animation: none !important;
+}
+
+/* Indicador de progreso en el header (muestra qué tool se está ejecutando) */
+.header-progress-label {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  font-style: italic;
+  background: rgba(195, 166, 255, 0.08);
+  border: 1px solid rgba(195, 166, 255, 0.2);
+  padding: 3px 10px;
+  border-radius: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 260px;
+  animation: fadeIn 0.3s ease;
 }
 
 .header-user-badge {
