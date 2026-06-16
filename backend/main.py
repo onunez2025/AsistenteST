@@ -325,13 +325,16 @@ def parse_dsml_tool_calls(content: str) -> list:
 # ---------------------------------------------------------------------------
 
 TOOL_LABELS: Dict[str, str] = {
-    "ejecutar_consulta_sql":                  "Consultando base de datos...",
+    "ejecutar_consulta_sql":                   "Consultando base de datos...",
     "generar_reporte_excel":                   "Generando reporte Excel...",
     "generar_grafico":                         "Creando gráfico interactivo...",
     "guardar_regla_negocio":                   "Guardando regla de negocio...",
     "buscar_reglas_negocio":                   "Buscando en memoria compartida...",
     "obtener_ticket_c4c_tiempo_real":          "Consultando SAP C4C en tiempo real...",
     "consultar_tickets_c4c_por_tienda_y_fecha":"Consultando tickets por tienda en SAP C4C...",
+    "iniciar_analisis_masivo":                 "Iniciando análisis masivo en background...",
+    "verificar_estado_analisis":               "Verificando progreso del análisis...",
+    "cancelar_analisis":                       "Cancelando análisis...",
 }
 
 def tool_label(name: str) -> str:
@@ -490,6 +493,7 @@ Usa esta fecha para filtros de 'hoy', 'ayer', 'esta semana', 'este mes', 'este a
 2. GUARDRAIL: Eres exclusiva de la Gerencia de Atención al Cliente de Grupo SOLE / Rinnai. Rechaza con cortesía cualquier pregunta fuera de este contexto: "Lo siento, soy SIATC.IA y solo puedo ayudarte con consultas de la Gerencia de Atención al Cliente de Grupo SOLE / Rinnai."
 3. EFICIENCIA: Una consulta SQL consolidada cuando sea posible. NUNCA uses SELECT *.
 4. CONSULTAS MASIVAS (>3 meses, múltiples variables): Llama directamente a 'generar_reporte_excel' con columnas esenciales.
+4b. CLASIFICACIÓN SEMÁNTICA DE TICKETS: Cuando el usuario pida clasificar tickets leyendo y entendiendo el comentario del técnico (ej: "cuáles tienen fuga de gas real", "donde el cliente no estaba", "donde el equipo fue cambiado"), usa 'iniciar_analisis_masivo'. Este proceso corre en background sin límite de filas. Tras lanzarlo, informa al usuario el job_id y dile que puede preguntar el avance cuando quiera. Cuando el usuario pregunte por el progreso, usa 'verificar_estado_analisis'.
 5. GRÁFICOS: Usa 'generar_grafico' e incluye la etiqueta [EmbedChart:URL] sin modificarla. Tipos disponibles: 'bar' (barras verticales), 'bar_h' (barras horizontales — ideal para rankings), 'line' (línea), 'pie' (torta), 'scatter' (dispersión), 'funnel' (embudo), 'histogram' (histograma).
 6. RESPUESTAS: En español, profesional, analítico. Usa tablas Markdown cuando aporten claridad.
 7. ADJUNTOS: El backend ya procesó el archivo adjunto y te envió su contenido al final del mensaje. Úsalo directamente.

@@ -1,6 +1,8 @@
 import os
 import sys
 import re
+import uuid
+import subprocess
 import logging
 import pyodbc
 import pandas as pd
@@ -69,12 +71,14 @@ def upload_file_to_azure_blob(local_filepath: str, blob_name: str, content_type:
 
 # Define directories relative to this file's location to ensure correctness
 BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
-STATIC_DIR = os.path.join(BACKEND_DIR, "static")
+STATIC_DIR  = os.path.join(BACKEND_DIR, "static")
 REPORTS_DIR = os.path.join(STATIC_DIR, "reports")
-CHARTS_DIR = os.path.join(STATIC_DIR, "charts")
+CHARTS_DIR  = os.path.join(STATIC_DIR, "charts")
+JOBS_DIR    = os.path.join(STATIC_DIR, "jobs")
 
 os.makedirs(REPORTS_DIR, exist_ok=True)
-os.makedirs(CHARTS_DIR, exist_ok=True)
+os.makedirs(CHARTS_DIR,  exist_ok=True)
+os.makedirs(JOBS_DIR,    exist_ok=True)
 
 # Initialize FastMCP Server
 mcp = FastMCP("Azure SQL Database Server")
@@ -383,6 +387,188 @@ def buscar_reglas_negocio(termino_busqueda: Optional[str] = None) -> str:
     except Exception as e:
         logger.error(f"Error en buscar_reglas_negocio: {e}")
         return f"Error al buscar reglas de negocio: {str(e)}"
+
+@mcp.tool()
+def iniciar_analisis_masivo(
+    sql_query: str,
+    criterio_clasificacion: str,
+    columna_id: str,
+    columna_texto: str,
+    nombre_reporte: str
+) -> str:
+    """
+    Lanza un análisis masivo de tickets en SEGUNDO PLANO: ejecuta una consulta SQL SIN límite
+    de filas, clasifica cada comentario usando AI (DeepSeek) según el criterio indicado, y genera
+    un Excel descargable con columnas 'Clasificacion' (SI/NO/INDEFINIDO) y 'Justificacion_AI'.
+
+    Úsala cuando el usuario necesite clasificar grandes volúmenes de tickets según un criterio
+    semántico que requiere leer y entender el comentario del técnico (no solo buscar palabras clave).
+    Ejemplos: "tickets con fuga de gas confirmada", "servicios donde el equipo fue reemplazado",
+    "visitas donde el cliente estaba ausente".
+
+    El proceso corre en background. Devuelve un job_id para consultar el progreso
+    con verificar_estado_analisis(job_id). NO bloquea la conversación.
+
+    Args:
+        sql_query: SQL SELECT sin límite de filas. DEBE incluir la columna ID y la columna de texto.
+                   Recomendado: pre-filtrar por fechas y excluir comentarios nulos para reducir volumen.
+                   Ejemplo: SELECT Ticket, FechaVisita, NombreTecnico, ComentarioTecnico
+                            FROM [APPGAC].[ServiciosViewSQL]
+                            WHERE YEAR(FechaVisita) = 2026 AND ComentarioTecnico IS NOT NULL
+                            AND LEN(LTRIM(ComentarioTecnico)) > 5
+        criterio_clasificacion: Descripción clara y precisa del criterio para responder SI o NO.
+                                  Ser específico mejora la precisión. Ejemplo:
+                                  "El técnico detectó y confirmó una fuga de gas real. NO cuenta: inspecciones
+                                  preventivas sin fuga, ni comentarios que digan que no había fuga."
+        columna_id: Nombre exacto de la columna que identifica cada ticket (ej: 'Ticket').
+        columna_texto: Nombre exacto de la columna con el texto a clasificar (ej: 'ComentarioTecnico').
+        nombre_reporte: Nombre del archivo Excel resultante (ej: 'fugas_gas_2026').
+    """
+    job_id = uuid.uuid4().hex[:10]
+
+    config = {
+        "job_id":        job_id,
+        "sql_query":     sql_query,
+        "criteria":      criterio_clasificacion,
+        "columna_id":    columna_id,
+        "columna_texto": columna_texto,
+        "nombre_reporte": nombre_reporte,
+        "created_at":    datetime.now().isoformat()
+    }
+
+    config_path = os.path.join(JOBS_DIR, f"{job_id}_config.json")
+    with open(config_path, "w", encoding="utf-8") as f:
+        json.dump(config, f, ensure_ascii=False)
+
+    # Crear progress inicial para que verificar_estado_analisis no devuelva "no encontrado"
+    progress_path = os.path.join(JOBS_DIR, f"{job_id}.json")
+    with open(progress_path, "w", encoding="utf-8") as f:
+        json.dump({
+            "status": "starting", "message": "Iniciando análisis...",
+            "procesados": 0, "total": 0, "si": 0, "no": 0, "indefinido": 0,
+            "pct": 0, "download_url": None, "updated_at": datetime.now().isoformat()
+        }, f, ensure_ascii=False)
+
+    script_path = os.path.join(BACKEND_DIR, "analyze_batch.py")
+    kwargs = {
+        "stdout": subprocess.DEVNULL,
+        "stderr": subprocess.DEVNULL,
+        "cwd": BACKEND_DIR,
+    }
+    if sys.platform == "win32":
+        kwargs["creationflags"] = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+    else:
+        kwargs["close_fds"] = True
+
+    subprocess.Popen([sys.executable, script_path, job_id], **kwargs)
+
+    tiempo_est = "desconocido (depende del volumen)"
+    return (
+        f"✅ Análisis masivo iniciado en segundo plano.\n\n"
+        f"**Job ID:** `{job_id}`\n"
+        f"**Criterio:** {criterio_clasificacion}\n"
+        f"**Columna analizada:** {columna_texto}\n"
+        f"**Reporte:** {nombre_reporte}\n\n"
+        f"Velocidad estimada: ~6,000 tickets/minuto.\n"
+        f"- 10,000 tickets → ~2 min\n"
+        f"- 100,000 tickets → ~17 min\n"
+        f"- 700,000 tickets → ~2 horas\n\n"
+        f"Consulta el progreso con: `verificar_estado_analisis('{job_id}')`"
+    )
+
+
+@mcp.tool()
+def verificar_estado_analisis(job_id: str) -> str:
+    """
+    Consulta el progreso de un análisis masivo lanzado con iniciar_analisis_masivo.
+    Devuelve el porcentaje completado, conteos parciales y el enlace de descarga
+    cuando el análisis termina. Úsala periódicamente para informar al usuario del avance.
+
+    Args:
+        job_id: ID devuelto por iniciar_analisis_masivo.
+    """
+    path = os.path.join(JOBS_DIR, f"{job_id}.json")
+    if not os.path.exists(path):
+        return f"No se encontró el análisis con ID '{job_id}'. Verifica que el ID sea correcto."
+
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            d = json.load(f)
+    except Exception as e:
+        return f"Error leyendo estado del análisis: {e}"
+
+    status      = d.get("status", "unknown")
+    procesados  = d.get("procesados", 0)
+    total       = d.get("total", 0)
+    si_n        = d.get("si", 0)
+    no_n        = d.get("no", 0)
+    indef_n     = d.get("indefinido", 0)
+    pct         = d.get("pct", 0)
+    msg         = d.get("message", "")
+    url         = d.get("download_url")
+
+    if status in ("starting", "running"):
+        barra = "█" * int(pct / 5) + "░" * (20 - int(pct / 5))
+        return (
+            f"⏳ **Análisis en progreso** — {pct}%\n"
+            f"`{barra}`\n\n"
+            f"Procesados: {procesados:,} de {total:,} tickets\n"
+            f"✅ SI: {si_n:,}  ❌ NO: {no_n:,}  ❓ Indefinidos: {indef_n:,}\n\n"
+            f"_{msg}_"
+        )
+    elif status == "completed":
+        return (
+            f"✅ **Análisis completado.**\n\n"
+            f"| Resultado | Tickets |\n"
+            f"|---|---|\n"
+            f"| Total analizados | {total:,} |\n"
+            f"| ✅ Positivos (SI) | {si_n:,} |\n"
+            f"| ❌ Negativos (NO) | {no_n:,} |\n"
+            f"| ❓ Indefinidos | {indef_n:,} |\n\n"
+            f"[Descargar Reporte Excel]({url})"
+        )
+    elif status == "cancelled":
+        return (
+            f"🚫 Análisis cancelado.\n"
+            f"Se procesaron {procesados:,} de {total:,} tickets antes de cancelar.\n"
+            f"SI: {si_n:,} | NO: {no_n:,} | Indefinidos: {indef_n:,}"
+        )
+    elif status == "error":
+        return f"🔴 **Error en el análisis:** {msg}"
+    else:
+        return f"Estado desconocido: {status} — {msg}"
+
+
+@mcp.tool()
+def cancelar_analisis(job_id: str) -> str:
+    """
+    Cancela un análisis masivo en curso lanzado con iniciar_analisis_masivo.
+    El proceso se detiene al finalizar el lote actual (puede tardar hasta 30 segundos).
+    Los tickets ya procesados se conservan en el progreso.
+
+    Args:
+        job_id: ID del análisis a cancelar.
+    """
+    progress_path = os.path.join(JOBS_DIR, f"{job_id}.json")
+    cancel_flag   = os.path.join(JOBS_DIR, f"{job_id}_cancel.flag")
+
+    if not os.path.exists(progress_path):
+        return f"No se encontró el análisis con ID '{job_id}'."
+
+    with open(progress_path, "r", encoding="utf-8") as f:
+        d = json.load(f)
+
+    if d.get("status") not in ("starting", "running"):
+        return f"El análisis '{job_id}' no está en ejecución (estado: {d.get('status')})."
+
+    with open(cancel_flag, "w") as f:
+        f.write("cancel")
+
+    return (
+        f"✅ Señal de cancelación enviada al análisis `{job_id}`.\n"
+        f"El proceso se detendrá al finalizar el lote actual (máx. ~30 segundos)."
+    )
+
 
 if __name__ == "__main__":
     mcp.run()
