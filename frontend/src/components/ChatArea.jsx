@@ -22,7 +22,14 @@ function ChatArea({
 }) {
   const [isListening, setIsListening] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth <= 768);
   const textareaRef = useRef(null);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Auto-resize del textarea: crece con el contenido y se resetea al limpiar
   const resizeTextarea = useCallback(() => {
@@ -198,22 +205,24 @@ function ChatArea({
         />
 
         <div className="input-actions-group">
-          {/* Badge del modelo — oculto en móvil via clase */}
-          <span className="model-select-badge desktop-only" title="Modelo LLM activo">
-            <Bot size={13} />
-            <span>DeepSeek</span>
-          </span>
-
-          {/* Micrófono — solo en desktop; en móvil ocupa espacio innecesario */}
-          <button
-            className={`input-action-btn mic-btn desktop-only ${isListening ? 'listening' : ''}`}
-            onClick={handleVoiceInput}
-            title="Dictar por voz"
-            type="button"
-            disabled={isLoading}
-          >
-            <Mic size={18} />
-          </button>
+          {/* Badge y micrófono: solo en desktop */}
+          {!isMobile && (
+            <>
+              <span className="model-select-badge" title="Modelo LLM activo">
+                <Bot size={13} />
+                <span>DeepSeek</span>
+              </span>
+              <button
+                className={`input-action-btn mic-btn ${isListening ? 'listening' : ''}`}
+                onClick={handleVoiceInput}
+                title="Dictar por voz"
+                type="button"
+                disabled={isLoading}
+              >
+                <Mic size={18} />
+              </button>
+            </>
+          )}
 
           {/* Stop o Enviar */}
           {isLoading ? (
