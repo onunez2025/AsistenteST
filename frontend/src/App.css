@@ -95,6 +95,11 @@ h1, h2, h3, .brand-title, .gemini-welcome-title {
   border-right: none;
 }
 
+/* Elementos que solo se muestran en escritorio */
+.desktop-only {
+  display: flex; /* valor por defecto para desktop */
+}
+
 /* Overlay oscuro que aparece detrás del sidebar en móvil */
 .sidebar-overlay {
   display: none; /* solo visible en móvil via media query */
@@ -1343,8 +1348,9 @@ h1, h2, h3, .brand-title, .gemini-welcome-title {
     width: 34px;
     height: 34px;
   }
-  .model-select-badge {
-    display: none; /* ocultar en móvil para ahorrar espacio */
+  /* Ocultar todos los elementos marcados como solo-desktop */
+  .desktop-only {
+    display: none !important;
   }
   .disclaimer-text {
     font-size: 9.5px;

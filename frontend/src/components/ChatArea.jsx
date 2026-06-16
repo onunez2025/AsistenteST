@@ -198,15 +198,15 @@ function ChatArea({
         />
 
         <div className="input-actions-group">
-          {/* Badge del modelo */}
-          <span className="model-select-badge" title="Modelo LLM activo">
+          {/* Badge del modelo — oculto en móvil via clase */}
+          <span className="model-select-badge desktop-only" title="Modelo LLM activo">
             <Bot size={13} />
             <span>DeepSeek</span>
           </span>
 
-          {/* Micrófono */}
+          {/* Micrófono — solo en desktop; en móvil ocupa espacio innecesario */}
           <button
-            className={`input-action-btn mic-btn ${isListening ? 'listening' : ''}`}
+            className={`input-action-btn mic-btn desktop-only ${isListening ? 'listening' : ''}`}
             onClick={handleVoiceInput}
             title="Dictar por voz"
             type="button"
@@ -215,7 +215,7 @@ function ChatArea({
             <Mic size={18} />
           </button>
 
-          {/* Botón Stop (solo visible cuando carga) o Enviar */}
+          {/* Stop o Enviar */}
           {isLoading ? (
             <button
               className="input-action-btn stop-btn"
