@@ -148,7 +148,10 @@ function App() {
     try {
       const resp = await fetch(`${API_BASE_URL}/api/chat/title`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({ first_message: firstMessage })
       });
       if (resp.ok) {
@@ -216,7 +219,10 @@ function App() {
     try {
       const response = await fetch(`${API_BASE_URL}/api/chat/stream`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         signal: controller.signal,
         body: JSON.stringify({
           messages: activeChat.messages.map(m => ({

@@ -11,6 +11,8 @@ from fastmcp import FastMCP
 from azure.storage.blob import BlobServiceClient, ContentSettings
 from typing import Optional
 import json
+from openpyxl.styles import PatternFill, Font, Alignment
+from openpyxl.utils import get_column_letter
 
 # Setup logging to stderr because stdout is used for MCP stdio protocol communication
 logging.basicConfig(
@@ -123,12 +125,12 @@ def ejecutar_consulta_sql(sql_query: str) -> str:
         df = pd.read_sql(sql_query, conn)
         conn.close()
         
-        limit = 100
+        limit = 500
         total_rows = len(df)
         if total_rows > limit:
             df_limited = df.head(limit)
             result_json = df_limited.to_json(orient="records", date_format="iso")
-            return f"Resultados (Primeros {limit} de {total_rows} filas):\n{result_json}"
+            return f"Resultados (Primeros {limit} de {total_rows} filas totales):\n{result_json}"
         else:
             return df.to_json(orient="records", date_format="iso")
             
@@ -163,8 +165,30 @@ def generar_reporte_excel(sql_query: str, nombre_reporte: str) -> str:
         safe_name = re.sub(r"[^\w\-]", "_", nombre_reporte).lower()
         filename = f"{safe_name}_{timestamp}.xlsx"
         filepath = os.path.join(REPORTS_DIR, filename)
-        
-        df.to_excel(filepath, index=False, sheet_name="Reporte Chatbot")
+
+        with pd.ExcelWriter(filepath, engine="openpyxl") as writer:
+            df.to_excel(writer, index=False, sheet_name="Reporte")
+            ws = writer.sheets["Reporte"]
+
+            # Estilo de encabezados
+            header_fill = PatternFill(start_color="1E3A5F", end_color="1E3A5F", fill_type="solid")
+            header_font = Font(color="FFFFFF", bold=True, size=11)
+            header_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
+            for col_idx in range(1, len(df.columns) + 1):
+                cell = ws.cell(row=1, column=col_idx)
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = header_align
+            ws.row_dimensions[1].height = 22
+
+            # Auto-ancho de columnas
+            for col in ws.columns:
+                col_letter = get_column_letter(col[0].column)
+                max_len = max((len(str(cell.value)) for cell in col if cell.value is not None), default=8)
+                ws.column_dimensions[col_letter].width = min(max_len + 4, 55)
+
+            # Fijar primera fila
+            ws.freeze_panes = "A2"
         
         # Subir a Azure Blob Storage
         blob_name = f"generated/reports/{filename}"
@@ -191,14 +215,14 @@ def generar_reporte_excel(sql_query: str, nombre_reporte: str) -> str:
 @mcp.tool()
 def generar_grafico(sql_query: str, tipo_grafico: str, columna_x: str, columna_y: str, titulo: str) -> str:
     """
-    Ejecuta una consulta SQL, analiza los datos y genera un gráfico interactivo en formato HTML 
+    Ejecuta una consulta SQL, analiza los datos y genera un gráfico interactivo en formato HTML
     (usando Plotly). Devuelve el enlace de visualización para incrustar el gráfico en el chat.
-    
+
     Args:
         sql_query: Consulta SQL SELECT para obtener los datos del gráfico.
-        tipo_grafico: Tipo de gráfico a generar. Valores: 'bar' (barras), 'line' (línea), 'pie' (torta), 'scatter' (dispersión).
-        columna_x: Nombre de la columna para el eje X (o etiquetas en gráfico de torta).
-        columna_y: Nombre de la columna para el eje Y (valores a graficar).
+        tipo_grafico: Tipo de gráfico: 'bar' (barras verticales), 'bar_h' (barras horizontales — ideal para rankings de técnicos/CAS), 'line' (línea de tendencia), 'pie' (torta/porcentajes), 'scatter' (dispersión), 'funnel' (embudo — para pipelines), 'histogram' (distribución de frecuencia de columna_x).
+        columna_x: Columna para el eje X (categorías). En bar_h: es el eje Y (categorías). En histogram: columna a analizar.
+        columna_y: Columna para el eje Y (valores numéricos). En bar_h: es el eje X (valores). En histogram: se ignora.
         titulo: Título del gráfico.
     """
     logger.info(f"[MCP DB] generar_grafico: {tipo_grafico} | {titulo}")
@@ -218,17 +242,24 @@ def generar_grafico(sql_query: str, tipo_grafico: str, columna_x: str, columna_y
             
         fig = None
         tipo_grafico = tipo_grafico.lower().strip()
-        
+
         if tipo_grafico == "bar":
-            fig = px.bar(df, x=columna_x, y=columna_y, title=titulo, template="plotly_dark")
+            fig = px.bar(df, x=columna_x, y=columna_y, title=titulo, template="plotly_dark", text_auto=True)
+        elif tipo_grafico == "bar_h":
+            fig = px.bar(df, y=columna_x, x=columna_y, title=titulo, template="plotly_dark",
+                         orientation="h", text_auto=True)
         elif tipo_grafico == "line":
-            fig = px.line(df, x=columna_x, y=columna_y, title=titulo, template="plotly_dark")
+            fig = px.line(df, x=columna_x, y=columna_y, title=titulo, template="plotly_dark", markers=True)
         elif tipo_grafico == "pie":
             fig = px.pie(df, names=columna_x, values=columna_y, title=titulo, template="plotly_dark")
         elif tipo_grafico == "scatter":
             fig = px.scatter(df, x=columna_x, y=columna_y, title=titulo, template="plotly_dark")
+        elif tipo_grafico == "funnel":
+            fig = px.funnel(df, x=columna_y, y=columna_x, title=titulo, template="plotly_dark")
+        elif tipo_grafico == "histogram":
+            fig = px.histogram(df, x=columna_x, title=titulo, template="plotly_dark")
         else:
-            fig = px.bar(df, x=columna_x, y=columna_y, title=titulo, template="plotly_dark")
+            fig = px.bar(df, x=columna_x, y=columna_y, title=titulo, template="plotly_dark", text_auto=True)
             
         fig.update_layout(
             paper_bgcolor="rgba(24, 24, 28, 0.95)",

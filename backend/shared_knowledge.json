@@ -4,5 +4,41 @@
     "explicacion": "Está estrictamente prohibido utilizar la tabla 'TBL_C4C_REPORTE_CONTROL' y cualquier tabla con el prefijo 'GACP_APP_TB_' para obtener o filtrar datos por lugar de compra (tienda).\nPara consultar o filtrar tickets de SAP C4C por tienda (ej. Promart, Sodimac, Hiraoka, etc.) y fecha, se debe utilizar la herramienta MCP 'consultar_tickets_c4c_por_tienda_y_fecha'. Esta herramienta mapea la tienda a sus códigos correspondientes en SAP C4C y consulta en tiempo real los tickets vía OData.\nSi el usuario no especifica un rango de fechas, utiliza por defecto los últimos 30 días a partir de la fecha actual de hoy.",
     "consulta_sql": null,
     "fecha_creacion": "2026-06-11 11:15:00"
+  },
+  {
+    "tema": "Cálculo de NPS (Net Promoter Score)",
+    "explicacion": "El NPS se calcula desde la tabla [dbo].[GAC_APP_TB_NPS] usando la columna Calificacion_NPS (valores 0-10).\n- Promotores: Calificacion_NPS >= 9\n- Neutros: Calificacion_NPS BETWEEN 7 AND 8\n- Detractores: Calificacion_NPS <= 6\nFórmula: NPS = (COUNT(Promotores) * 100.0 / COUNT(*)) - (COUNT(Detractores) * 100.0 / COUNT(*))\nRango: -100 a +100. Un NPS > 50 es excelente. Filtrar por CAS con la columna CAS de la tabla.",
+    "consulta_sql": "SELECT\n  CAS,\n  COUNT(*) AS Total_Encuestas,\n  SUM(CASE WHEN Calificacion_NPS >= 9 THEN 1 ELSE 0 END) AS Promotores,\n  SUM(CASE WHEN Calificacion_NPS BETWEEN 7 AND 8 THEN 1 ELSE 0 END) AS Neutros,\n  SUM(CASE WHEN Calificacion_NPS <= 6 THEN 1 ELSE 0 END) AS Detractores,\n  ROUND(\n    (SUM(CASE WHEN Calificacion_NPS >= 9 THEN 1.0 ELSE 0 END) / COUNT(*)) * 100\n    - (SUM(CASE WHEN Calificacion_NPS <= 6 THEN 1.0 ELSE 0 END) / COUNT(*)) * 100\n  , 1) AS NPS\nFROM [dbo].[GAC_APP_TB_NPS]\nWHERE Fecha_encuesta >= DATEADD(MONTH, -1, GETDATE())\nGROUP BY CAS\nORDER BY NPS DESC",
+    "fecha_creacion": "2026-06-16 00:00:00"
+  },
+  {
+    "tema": "Eficiencia operativa de técnicos (tasa de trabajo realizado)",
+    "explicacion": "La eficiencia de un técnico o CAS se mide como el porcentaje de servicios donde TrabajoRealizado = 'true' sobre el total de servicios asignados (Estado IN ('Closed','Finished')).\nFórmula: Eficiencia = (Servicios con TrabajoRealizado='true') * 100.0 / Total servicios cerrados o terminados.\nUsar tabla [APPGAC].[ServiciosViewSQL]. Agrupar por NombreTecnico + ApellidoTecnico o por CAS según lo que pida el usuario.",
+    "consulta_sql": "SELECT\n  CAS,\n  NombreTecnico + ' ' + ApellidoTecnico AS Tecnico,\n  COUNT(*) AS Total_Servicios,\n  SUM(CASE WHEN TrabajoRealizado = 'true' THEN 1 ELSE 0 END) AS Trabajos_Realizados,\n  ROUND(SUM(CASE WHEN TrabajoRealizado = 'true' THEN 1.0 ELSE 0 END) / COUNT(*) * 100, 1) AS Eficiencia_Pct\nFROM [APPGAC].[ServiciosViewSQL]\nWHERE Estado IN ('Closed', 'Finished')\n  AND FechaVisita >= DATEADD(MONTH, -1, GETDATE())\nGROUP BY CAS, NombreTecnico, ApellidoTecnico\nHAVING COUNT(*) >= 5\nORDER BY Eficiencia_Pct DESC",
+    "fecha_creacion": "2026-06-16 00:00:00"
+  },
+  {
+    "tema": "JOIN entre ServiciosViewSQL y ServiciosMateriales (materiales por servicio)",
+    "explicacion": "Para obtener los materiales o repuestos utilizados en un servicio, hacer JOIN entre [APPGAC].[ServiciosViewSQL] y [APPGAC].[ServiciosMateriales] usando la columna LlamadaFSM.\nPara obtener la descripción del motivo del material, hacer JOIN adicional con [APPGAC].[ServiciosMaterialesMotivos].\nNUNCA hacer SELECT * — siempre especificar columnas.",
+    "consulta_sql": "SELECT\n  sv.Ticket,\n  sv.NombreCliente,\n  sv.NombreTecnico + ' ' + sv.ApellidoTecnico AS Tecnico,\n  sv.FechaVisita,\n  sm.CodigoMaterial,\n  sm.DescripcionMaterial,\n  sm.Cantidad,\n  smm.DescripcionMotivo\nFROM [APPGAC].[ServiciosViewSQL] sv\nINNER JOIN [APPGAC].[ServiciosMateriales] sm ON sv.LlamadaFSM = sm.LlamadaFSM\nLEFT JOIN [APPGAC].[ServiciosMaterialesMotivos] smm ON sm.IdMotivo = smm.IdMotivo\nWHERE sv.FechaVisita >= DATEADD(DAY, -30, GETDATE())\nORDER BY sv.FechaVisita DESC",
+    "fecha_creacion": "2026-06-16 00:00:00"
+  },
+  {
+    "tema": "Técnicos propios (SOLE / MT Industrial) vs técnicos externos (CAS)",
+    "explicacion": "Los técnicos propios de MT Industrial / SOLE tienen IdCAS = 'e9a5a911' en [APPGAC].[ServiciosViewSQL].\nNUNCA usar CAS LIKE '%SOLE%' ni CAS LIKE '%MT%' porque el nombre exacto puede variar.\nLos técnicos externos son todos los que tienen IdCAS diferente a 'e9a5a911'.\nPara listar técnicos propios: JOIN con [dbo].[GAC_APP_TB_EMPLEADOS] usando TRY_CAST(sv.CodigoTecnico AS INT) = TRY_CAST(emp.ID_empleado AS INT).\nPara técnicos externos (CAS): JOIN con [dbo].[GAC_APP_TB_COLABORADORES_CAS] usando col.Nombre_FSM = RTRIM(sv.NombreTecnico) + ' ' + RTRIM(sv.ApellidoTecnico).",
+    "consulta_sql": "-- Servicios de técnicos propios SOLE:\nSELECT COUNT(*) AS Servicios_SOLE FROM [APPGAC].[ServiciosViewSQL] WHERE IdCAS = 'e9a5a911'\n\n-- Servicios de técnicos externos:\nSELECT IdCAS, CAS, COUNT(*) AS Servicios FROM [APPGAC].[ServiciosViewSQL] WHERE IdCAS <> 'e9a5a911' GROUP BY IdCAS, CAS ORDER BY Servicios DESC",
+    "fecha_creacion": "2026-06-16 00:00:00"
+  },
+  {
+    "tema": "Cancelaciones correctas vs incorrectas",
+    "explicacion": "La tabla [dbo].[GAC_APP_TB_CANCELACIONES] registra todas las cancelaciones de tickets.\nColumna Cancelacion_Correcta: 'SI' = cancelación justificada/aprobada, 'NO' = cancelación incorrecta o sin justificación.\nColumna Estado_Proceso: estado actual del proceso de cancelación.\nPara análisis de calidad se reporta el ratio de cancelaciones correctas sobre el total.\nJOIN con ServiciosViewSQL por la columna Ticket para obtener datos del servicio cancelado.",
+    "consulta_sql": "SELECT\n  Motivo_Cancelacion,\n  Cancelacion_Correcta,\n  COUNT(*) AS Total,\n  ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER(), 1) AS Porcentaje\nFROM [dbo].[GAC_APP_TB_CANCELACIONES]\nWHERE Generado_el >= DATEADD(MONTH, -1, GETDATE())\nGROUP BY Motivo_Cancelacion, Cancelacion_Correcta\nORDER BY Total DESC",
+    "fecha_creacion": "2026-06-16 00:00:00"
+  },
+  {
+    "tema": "Reporte mensual de servicios por CAS (resumen ejecutivo)",
+    "explicacion": "Para el reporte mensual de servicios agrupados por CAS se usa [APPGAC].[ServiciosViewSQL].\nIncluir: total de servicios, servicios cerrados, trabajo realizado, solicitudes de nueva visita, y tasa de eficiencia.\nFiltrar por mes usando YEAR(FechaVisita) = YEAR(GETDATE()) AND MONTH(FechaVisita) = MONTH(GETDATE()) para el mes actual.\nSi el usuario pide el mes anterior: MONTH(FechaVisita) = MONTH(DATEADD(MONTH,-1,GETDATE())).\nPara reportes de más de 1 mes usar 'generar_reporte_excel' directamente.",
+    "consulta_sql": "SELECT\n  IdCAS,\n  CAS,\n  COUNT(*) AS Total,\n  SUM(CASE WHEN Estado IN ('Closed','Finished') THEN 1 ELSE 0 END) AS Cerrados,\n  SUM(CASE WHEN TrabajoRealizado = 'true' THEN 1 ELSE 0 END) AS Trabajo_OK,\n  SUM(CASE WHEN SolicitaNuevaVisita = 'true' THEN 1 ELSE 0 END) AS Nueva_Visita,\n  ROUND(SUM(CASE WHEN TrabajoRealizado='true' THEN 1.0 ELSE 0 END)/NULLIF(SUM(CASE WHEN Estado IN ('Closed','Finished') THEN 1 ELSE 0 END),0)*100,1) AS Eficiencia_Pct\nFROM [APPGAC].[ServiciosViewSQL]\nWHERE YEAR(FechaVisita) = YEAR(GETDATE()) AND MONTH(FechaVisita) = MONTH(GETDATE())\nGROUP BY IdCAS, CAS\nORDER BY Total DESC",
+    "fecha_creacion": "2026-06-16 00:00:00"
   }
 ]
