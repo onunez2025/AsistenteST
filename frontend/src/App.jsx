@@ -231,7 +231,17 @@ function App() {
         })
       });
 
-      if (!response.ok) throw new Error(`Error del servidor: ${response.status}`);
+      if (!response.ok) {
+        if (response.status === 401) {
+          handleLogout();
+          toastError("Sesión expirada", "Por favor inicia sesión nuevamente.");
+          setIsLoading(false);
+          setStreamingContent('');
+          setProgressLabel('');
+          return;
+        }
+        throw new Error(`Error del servidor: ${response.status}`);
+      }
 
       const reader  = response.body.getReader();
       const decoder = new TextDecoder();
