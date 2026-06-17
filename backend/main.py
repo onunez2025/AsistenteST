@@ -564,7 +564,7 @@ async def stream_chat_response(history_messages: List[ChatMessage], latest_messa
                 model="deepseek-chat",
                 messages=messages,
                 temperature=0.1,
-                max_tokens=4096,
+                max_tokens=8192,
                 **kwargs
             )
 
@@ -586,30 +586,17 @@ async def stream_chat_response(history_messages: List[ChatMessage], latest_messa
                 ]
                 tool_calls = list(tool_calls or []) + mocks
 
-            # Sin tool calls → es la respuesta final; hacer streaming de tokens
+            # Sin tool calls → es la respuesta final; emitir content_txt directamente
+            # (Re-llamar con stream=True causaba que DeepSeek volviera a emitir DSML crudo)
             if not tool_calls:
-                # Si ya tenemos el texto completo de una llamada anterior, streamear token a token
                 if content_txt:
-                    # Hacer streaming real de la respuesta final
-                    yield sse({"type": "status", "message": "Redactando respuesta..."})
-                    # Re-hacer la llamada con stream=True para la respuesta final
-                    stream_resp = client.chat.completions.create(
-                        model="deepseek-chat",
-                        messages=messages,
-                        stream=True,
-                        temperature=0.1,
-                        max_tokens=8192,
-                        **({"tools": openai_tools, "tool_choice": "none"} if openai_tools else {})
-                    )
-                    streamed_text = ""
-                    for chunk in stream_resp:
-                        delta = chunk.choices[0].delta
-                        if delta.content:
-                            yield sse({"type": "token", "content": delta.content})
-                            streamed_text += delta.content
-                    yield sse({"type": "done"})
-                else:
-                    yield sse({"type": "done"})
+                    clean = remove_dsml_blocks(content_txt)
+                    if clean:
+                        yield sse({"type": "status", "message": "Redactando respuesta..."})
+                        chunk_size = 20
+                        for i in range(0, len(clean), chunk_size):
+                            yield sse({"type": "token", "content": clean[i:i + chunk_size]})
+                yield sse({"type": "done"})
                 return
 
             # Agregar mensaje del asistente con tool_calls al historial
