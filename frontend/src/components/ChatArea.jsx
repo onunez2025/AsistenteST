@@ -93,13 +93,17 @@ function ChatArea({
       || /\[[^\]]+\]\((https:\/\/[^)]+\.html)\)/i.exec(content);
     const excelMatch = /\[Descargar Reporte Excel\]\(([^)]+)\)/i.exec(content)
       || /\[[^\]]+\]\((https:\/\/[^)]+\.xlsx)\)/i.exec(content);
+    const pdfMatch = /\[EmbedPDF:([^\]]+)\]/i.exec(content);
 
     const chartUrl = chartMatch?.[1] || null;
     const excelUrl = excelMatch?.[1] || null;
+    const pdfUrl   = pdfMatch?.[1] || null;
+    const pdfName  = pdfUrl ? (pdfUrl.split('/').pop() || 'informe_tecnico.pdf') : null;
 
     let clean = content;
     if (chartUrl) clean = clean.replace(/\[EmbedChart:[^\]]+\]/gi, '').replace(/\[[^\]]+\]\(https:\/\/[^)]+\.html\)/gi, '');
     if (excelUrl) clean = clean.replace(/\[Descargar Reporte Excel\]\([^)]+\)/gi, '').replace(/\[[^\]]+\]\(https:\/\/[^)]+\.xlsx\)/gi, '');
+    if (pdfUrl)   clean = clean.replace(/\[EmbedPDF:[^\]]+\]/gi, '');
 
     return (
       <div className="message-body">
@@ -128,6 +132,21 @@ function ChatArea({
             </div>
             <div className="chart-iframe-container">
               <iframe id={`chart-iframe-${index}`} src={getFullUrl(chartUrl)} title="Gráfico ST" className="chart-iframe" />
+            </div>
+          </div>
+        )}
+
+        {pdfUrl && (
+          <div className="pdf-container-wrapper">
+            <div className="chart-header-actions">
+              <span className="chart-indicator">📄 Informe Técnico</span>
+              <div className="chart-action-buttons">
+                <a href={getFullUrl(pdfUrl)} target="_blank" rel="noopener noreferrer" className="chart-action-btn">Abrir ↗</a>
+                <a href={getFullUrl(pdfUrl)} download={pdfName} className="chart-action-btn">Descargar 💾</a>
+              </div>
+            </div>
+            <div className="pdf-iframe-container">
+              <iframe src={getFullUrl(pdfUrl)} title="Informe Técnico" className="pdf-iframe" />
             </div>
           </div>
         )}

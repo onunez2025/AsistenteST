@@ -320,7 +320,7 @@ def obtener_adjuntos_ticket_c4c(ticket_id: str) -> str:
                     content_settings=ContentSettings(content_type="application/pdf")
                 )
                 public_url = blob_client.url
-                return f"Informe técnico del ticket {ticket_id}:\n**{att_name}** → [Abrir PDF]({public_url})"
+                return f"Informe técnico del ticket {ticket_id} — **{att_name}**\n[EmbedPDF:{public_url}]"
             except Exception as up_err:
                 logger.error(f"Error subiendo PDF a Azure Blob: {up_err}")
                 return f"PDF descargado correctamente pero error al publicar en Azure: {up_err}"

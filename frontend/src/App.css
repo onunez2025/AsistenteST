@@ -648,6 +648,26 @@ h1, h2, h3, .brand-title, .gemini-welcome-title {
   background: #059669;
 }
 
+/* PDF Viewer */
+.pdf-container-wrapper {
+  margin-top: 16px;
+  width: 100%;
+}
+
+.pdf-iframe-container {
+  width: 100%;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  background: #18181c;
+}
+
+.pdf-iframe {
+  width: 100%;
+  height: 600px;
+  border: none;
+}
+
 /* Plotly Chart Wrapper */
 .chart-container-wrapper {
   margin-top: 16px;
