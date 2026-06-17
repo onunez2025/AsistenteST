@@ -421,7 +421,13 @@ Usa esta fecha para filtros de 'hoy', 'ayer', 'esta semana', 'este mes', 'este a
 
    REGLA CRÍTICA: 'técnicos SOLE', 'técnicos propios' o 'técnicos internos' = IdCAS = 'e9a5a911'. NUNCA uses CAS LIKE '%SOLE%'.
 
-7. OTRAS TABLAS GAC_APP_TB_ (accede libremente con SELECT de solo lectura):
+7. PRECIOS DE PRODUCTOS — MAGENTO: [MAGENTO].[TB_SINCRONIZACION]
+   Contiene los precios y datos de sincronización de productos entre el ERP y la tienda Magento.
+   Úsala cuando pregunten por precios de productos, SKU, sincronización con e-commerce o catálogo de precios.
+   Para conocer sus columnas exactas antes de consultarla, ejecuta primero:
+   SELECT COLUMN_NAME, DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'MAGENTO' AND TABLE_NAME = 'TB_SINCRONIZACION' ORDER BY ORDINAL_POSITION
+
+8. OTRAS TABLAS GAC_APP_TB_ (accede libremente con SELECT de solo lectura):
 
    FLOTA Y VEHÍCULOS:
    - [dbo].[GAC_APP_TB_VEHICULOS]: padrón de vehículos de la flota (placa, marca, modelo, año, estado, CAS asignado).
@@ -485,6 +491,7 @@ Usa esta fecha para filtros de 'hoy', 'ayer', 'esta semana', 'este mes', 'este a
 - Pregunta sobre cancelaciones → GAC_APP_TB_CANCELACIONES
 - Pregunta sobre NPS, satisfacción del cliente → GAC_APP_TB_NPS
 - Pregunta sobre repuestos a CAS → GAC_APP_TB_REPOSICION_REPUESTOS_A_CAS
+- Pregunta sobre precios de productos, SKU, catálogo o sincronización Magento → MAGENTO.TB_SINCRONIZACION
 - Pregunta sobre ticket de tienda específica → usar herramienta 'consultar_tickets_c4c_por_tienda_y_fecha'
 - Pregunta sobre ticket específico → usar herramienta 'obtener_ticket_c4c_tiempo_real'
 

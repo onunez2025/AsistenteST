@@ -25,6 +25,7 @@ WHERE
     OR (TABLE_SCHEMA = 'APPGAC' AND TABLE_NAME IN (
         'ServiciosMateriales', 'ServiciosMaterialesMotivos', 'ServiciosViewSQL'
     ))
+    OR (TABLE_SCHEMA = 'MAGENTO' AND TABLE_NAME = 'TB_SINCRONIZACION')
 ORDER BY TABLE_SCHEMA, TABLE_NAME, ORDINAL_POSITION
 """
 
