@@ -242,11 +242,10 @@ def consultar_tickets_c4c_por_tienda_y_fecha(tienda_abreviatura: str, fecha_inic
 @mcp.tool()
 def obtener_adjuntos_ticket_c4c(ticket_id: str) -> str:
     """
-    Obtiene los archivos adjuntos (PDFs, imágenes, documentos) de un ticket de SAP C4C
-    vía OData. Descarga cada archivo usando las credenciales SAP y devuelve enlaces
-    públicos directos (sin requerir login de SAP al usuario).
-    Úsala cuando el usuario pida el informe técnico, reporte, PDF o cualquier adjunto
-    asociado a un ticket de SAP C4C.
+    Obtiene el informe técnico en PDF de un ticket de SAP C4C vía OData.
+    Navega por ObjectID → ServiceRequestAttachmentFolder → Binary/$value para
+    descargar el binario con credenciales SAP y devolver un enlace público directo.
+    Úsala cuando el usuario pida el informe técnico, reporte, PDF o adjunto de un ticket C4C.
 
     Args:
         ticket_id: El ID numérico del ticket de SAP C4C (ej. '123456').
@@ -256,77 +255,81 @@ def obtener_adjuntos_ticket_c4c(ticket_id: str) -> str:
     if not SAP_BASE_URL or not SAP_USER or not SAP_PASSWORD:
         return "Error: Las credenciales de SAP C4C no están configuradas en el servidor MCP."
 
-    try:
-        url = (
-            f"{SAP_BASE_URL}/ServiceRequestCollection"
-            f"?$filter=ID eq '{ticket_id}'"
-            f"&$expand=ServiceRequestAttachmentFolder"
-            f"&$format=json"
-        )
-        headers = {"Accept": "application/json"}
-        resp = requests.get(url, auth=HTTPBasicAuth(SAP_USER, SAP_PASSWORD), headers=headers, timeout=15)
+    auth = HTTPBasicAuth(SAP_USER, SAP_PASSWORD)
 
+    try:
+        # 1. Obtener el ticket por ID para extraer su ObjectID
+        search_url = f"{SAP_BASE_URL}/ServiceRequestCollection?$filter=ID eq '{ticket_id}'&$format=json"
+        resp = requests.get(search_url, auth=auth, timeout=15)
         if resp.status_code != 200:
-            return f"Error al conectar con SAP C4C OData: {resp.status_code} - {resp.text}"
+            return f"Error al conectar con SAP C4C OData: {resp.status_code} - {resp.text[:200]}"
 
         results = resp.json().get("d", {}).get("results", [])
         if not results:
             return f"No se encontró el ticket '{ticket_id}' en SAP C4C."
 
-        attachments = results[0].get("ServiceRequestAttachmentFolder", {}).get("results", [])
+        ticket     = results[0]
+        object_id  = ticket.get("ObjectID")
+        if not object_id:
+            return f"El ticket '{ticket_id}' no tiene ObjectID en SAP C4C."
+
+        # 2. Obtener adjuntos navegando desde el ObjectID
+        attachment_url = f"{SAP_BASE_URL}/ServiceRequestCollection('{object_id}')/ServiceRequestAttachmentFolder?$format=json"
+        att_resp = requests.get(attachment_url, auth=auth, timeout=15)
+        if att_resp.status_code != 200:
+            return f"Error al obtener adjuntos de C4C: {att_resp.status_code} - {att_resp.text[:200]}"
+
+        attachments = att_resp.json().get("d", {}).get("results", [])
         if not attachments:
             return f"El ticket '{ticket_id}' no tiene adjuntos registrados en SAP C4C."
 
-        auth      = HTTPBasicAuth(SAP_USER, SAP_PASSWORD)
-        lines     = [f"Adjuntos del ticket {ticket_id} ({len(attachments)} archivo(s)):"]
+        # 3. Priorizar PDF con "informe" o "report" en el nombre; fallback a cualquier PDF
+        pdf_report = next(
+            (a for a in attachments
+             if a.get("MimeType") == "application/pdf"
+             and ("informe" in (a.get("Name") or "").lower() or "report" in (a.get("Name") or "").lower())),
+            None
+        )
+        if not pdf_report:
+            pdf_report = next((a for a in attachments if a.get("MimeType") == "application/pdf"), None)
+        if not pdf_report:
+            names = [a.get("Name", "sin nombre") for a in attachments]
+            return f"El ticket '{ticket_id}' tiene {len(attachments)} adjunto(s) pero ninguno es PDF. Archivos: {', '.join(names)}"
 
-        for a in attachments:
-            name     = a.get("Name") or a.get("FileName") or f"adjunto_{ticket_id}"
-            mime     = a.get("MimeType") or "application/octet-stream"
-            doc_link = a.get("DocumentLink") or a.get("URI") or a.get("FileURL")
+        att_object_id = pdf_report.get("ObjectID")
+        att_name      = pdf_report.get("Name") or f"informe_{ticket_id}.pdf"
 
-            if not doc_link:
-                lines.append(f"- **{name}**: sin enlace disponible en OData.")
-                continue
+        # 4. Descargar el binario vía Binary/$value
+        binary_url = f"{SAP_BASE_URL}/ServiceRequestAttachmentFolderCollection('{att_object_id}')/Binary/$value"
+        pdf_resp   = requests.get(binary_url, auth=auth, timeout=30)
+        if pdf_resp.status_code != 200:
+            return f"Error al descargar el PDF desde C4C: {pdf_resp.status_code} - {pdf_resp.text[:200]}"
 
-            # Descargar el archivo usando credenciales SAP
+        file_bytes = pdf_resp.content
+
+        # 5. Subir a Azure Blob y devolver link público
+        if AZURE_STORAGE_CONNECTION_STRING:
             try:
-                file_resp = requests.get(doc_link, auth=auth, timeout=30)
-                if file_resp.status_code != 200:
-                    lines.append(f"- **{name}**: error al descargar desde SAP C4C ({file_resp.status_code}).")
-                    continue
-                file_bytes = file_resp.content
-            except Exception as dl_err:
-                logger.error(f"Error descargando adjunto '{name}': {dl_err}")
-                lines.append(f"- **{name}**: error al descargar — {dl_err}")
-                continue
-
-            # Subir a Azure Blob y devolver link público
-            if AZURE_STORAGE_CONNECTION_STRING:
-                try:
-                    safe_name = name.replace(" ", "_")
-                    blob_name = f"generated/adjuntos_c4c/{ticket_id}/{safe_name}"
-                    blob_client = BlobServiceClient.from_connection_string(
-                        AZURE_STORAGE_CONNECTION_STRING
-                    ).get_blob_client(container=AZURE_STORAGE_CONTAINER, blob=blob_name)
-                    blob_client.upload_blob(
-                        file_bytes, overwrite=True,
-                        content_settings=ContentSettings(content_type=mime)
-                    )
-                    public_url = blob_client.url
-                    lines.append(f"- **{name}**: [Abrir PDF]({public_url})")
-                except Exception as up_err:
-                    logger.error(f"Error subiendo adjunto '{name}' a Azure Blob: {up_err}")
-                    lines.append(f"- **{name}**: descargado pero error al publicar — {up_err}")
-            else:
-                # Sin Azure: devolver el link original como fallback
-                lines.append(f"- **{name}** ({mime}): {doc_link}  *(requiere sesión SAP activa)*")
-
-        return "\n".join(lines)
+                safe_name  = att_name.replace(" ", "_")
+                blob_name  = f"generated/adjuntos_c4c/{ticket_id}/{safe_name}"
+                blob_client = BlobServiceClient.from_connection_string(
+                    AZURE_STORAGE_CONNECTION_STRING
+                ).get_blob_client(container=AZURE_STORAGE_CONTAINER, blob=blob_name)
+                blob_client.upload_blob(
+                    file_bytes, overwrite=True,
+                    content_settings=ContentSettings(content_type="application/pdf")
+                )
+                public_url = blob_client.url
+                return f"Informe técnico del ticket {ticket_id}:\n**{att_name}** → [Abrir PDF]({public_url})"
+            except Exception as up_err:
+                logger.error(f"Error subiendo PDF a Azure Blob: {up_err}")
+                return f"PDF descargado correctamente pero error al publicar en Azure: {up_err}"
+        else:
+            return f"PDF descargado ({len(file_bytes)} bytes) pero AZURE_STORAGE_CONNECTION_STRING no está configurada."
 
     except Exception as e:
         logger.error(f"Error en obtener_adjuntos_ticket_c4c: {e}")
-        return f"Error al consultar adjuntos en SAP C4C: {str(e)}"
+        return f"Error al obtener el informe técnico de SAP C4C: {str(e)}"
 
 
 if __name__ == "__main__":
