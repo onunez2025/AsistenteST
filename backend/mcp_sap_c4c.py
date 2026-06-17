@@ -5,6 +5,7 @@ import requests
 from requests.auth import HTTPBasicAuth
 from dotenv import load_dotenv
 from fastmcp import FastMCP
+from azure.storage.blob import BlobServiceClient, ContentSettings
 
 # Setup logging to stderr because stdout is used for MCP stdio protocol communication
 logging.basicConfig(
@@ -27,8 +28,11 @@ else:
     load_dotenv(override=True)
 
 SAP_BASE_URL = os.getenv("SAP_BASE_URL")
-SAP_USER = os.getenv("SAP_USER")
+SAP_USER     = os.getenv("SAP_USER")
 SAP_PASSWORD = os.getenv("SAP_PASSWORD")
+
+AZURE_STORAGE_CONNECTION_STRING = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
+AZURE_STORAGE_CONTAINER         = os.getenv("AZURE_STORAGE_CONTAINER", "stecnico")
 
 # Initialize FastMCP Server
 mcp = FastMCP("SAP C4C Server")
@@ -239,7 +243,8 @@ def consultar_tickets_c4c_por_tienda_y_fecha(tienda_abreviatura: str, fecha_inic
 def obtener_adjuntos_ticket_c4c(ticket_id: str) -> str:
     """
     Obtiene los archivos adjuntos (PDFs, imágenes, documentos) de un ticket de SAP C4C
-    vía OData, incluyendo el enlace de descarga de cada adjunto.
+    vía OData. Descarga cada archivo usando las credenciales SAP y devuelve enlaces
+    públicos directos (sin requerir login de SAP al usuario).
     Úsala cuando el usuario pida el informe técnico, reporte, PDF o cualquier adjunto
     asociado a un ticket de SAP C4C.
 
@@ -272,12 +277,50 @@ def obtener_adjuntos_ticket_c4c(ticket_id: str) -> str:
         if not attachments:
             return f"El ticket '{ticket_id}' no tiene adjuntos registrados en SAP C4C."
 
-        lines = [f"Adjuntos del ticket {ticket_id} en SAP C4C ({len(attachments)} archivo(s)):"]
+        auth      = HTTPBasicAuth(SAP_USER, SAP_PASSWORD)
+        lines     = [f"Adjuntos del ticket {ticket_id} ({len(attachments)} archivo(s)):"]
+
         for a in attachments:
-            name     = a.get("Name") or a.get("FileName") or "Sin nombre"
-            mime     = a.get("MimeType") or ""
-            link     = a.get("DocumentLink") or a.get("URI") or a.get("FileURL") or "Sin enlace"
-            lines.append(f"- **{name}** ({mime}): {link}")
+            name     = a.get("Name") or a.get("FileName") or f"adjunto_{ticket_id}"
+            mime     = a.get("MimeType") or "application/octet-stream"
+            doc_link = a.get("DocumentLink") or a.get("URI") or a.get("FileURL")
+
+            if not doc_link:
+                lines.append(f"- **{name}**: sin enlace disponible en OData.")
+                continue
+
+            # Descargar el archivo usando credenciales SAP
+            try:
+                file_resp = requests.get(doc_link, auth=auth, timeout=30)
+                if file_resp.status_code != 200:
+                    lines.append(f"- **{name}**: error al descargar desde SAP C4C ({file_resp.status_code}).")
+                    continue
+                file_bytes = file_resp.content
+            except Exception as dl_err:
+                logger.error(f"Error descargando adjunto '{name}': {dl_err}")
+                lines.append(f"- **{name}**: error al descargar — {dl_err}")
+                continue
+
+            # Subir a Azure Blob y devolver link público
+            if AZURE_STORAGE_CONNECTION_STRING:
+                try:
+                    safe_name = name.replace(" ", "_")
+                    blob_name = f"generated/adjuntos_c4c/{ticket_id}/{safe_name}"
+                    blob_client = BlobServiceClient.from_connection_string(
+                        AZURE_STORAGE_CONNECTION_STRING
+                    ).get_blob_client(container=AZURE_STORAGE_CONTAINER, blob=blob_name)
+                    blob_client.upload_blob(
+                        file_bytes, overwrite=True,
+                        content_settings=ContentSettings(content_type=mime)
+                    )
+                    public_url = blob_client.url
+                    lines.append(f"- **{name}**: [Abrir PDF]({public_url})")
+                except Exception as up_err:
+                    logger.error(f"Error subiendo adjunto '{name}' a Azure Blob: {up_err}")
+                    lines.append(f"- **{name}**: descargado pero error al publicar — {up_err}")
+            else:
+                # Sin Azure: devolver el link original como fallback
+                lines.append(f"- **{name}** ({mime}): {doc_link}  *(requiere sesión SAP activa)*")
 
         return "\n".join(lines)
 
