@@ -235,5 +235,56 @@ def consultar_tickets_c4c_por_tienda_y_fecha(tienda_abreviatura: str, fecha_inic
         logger.error(f"Error en consultar_tickets_c4c_por_tienda_y_fecha: {e}")
         return f"Error al realizar la consulta en SAP C4C: {str(e)}"
 
+@mcp.tool()
+def obtener_adjuntos_ticket_c4c(ticket_id: str) -> str:
+    """
+    Obtiene los archivos adjuntos (PDFs, imágenes, documentos) de un ticket de SAP C4C
+    vía OData, incluyendo el enlace de descarga de cada adjunto.
+    Úsala cuando el usuario pida el informe técnico, reporte, PDF o cualquier adjunto
+    asociado a un ticket de SAP C4C.
+
+    Args:
+        ticket_id: El ID numérico del ticket de SAP C4C (ej. '123456').
+    """
+    logger.info(f"[MCP TOOL] obtener_adjuntos_ticket_c4c para ticket: {ticket_id}")
+
+    if not SAP_BASE_URL or not SAP_USER or not SAP_PASSWORD:
+        return "Error: Las credenciales de SAP C4C no están configuradas en el servidor MCP."
+
+    try:
+        url = (
+            f"{SAP_BASE_URL}/ServiceRequestCollection"
+            f"?$filter=ID eq '{ticket_id}'"
+            f"&$expand=ServiceRequestAttachmentFolder"
+            f"&$format=json"
+        )
+        headers = {"Accept": "application/json"}
+        resp = requests.get(url, auth=HTTPBasicAuth(SAP_USER, SAP_PASSWORD), headers=headers, timeout=15)
+
+        if resp.status_code != 200:
+            return f"Error al conectar con SAP C4C OData: {resp.status_code} - {resp.text}"
+
+        results = resp.json().get("d", {}).get("results", [])
+        if not results:
+            return f"No se encontró el ticket '{ticket_id}' en SAP C4C."
+
+        attachments = results[0].get("ServiceRequestAttachmentFolder", {}).get("results", [])
+        if not attachments:
+            return f"El ticket '{ticket_id}' no tiene adjuntos registrados en SAP C4C."
+
+        lines = [f"Adjuntos del ticket {ticket_id} en SAP C4C ({len(attachments)} archivo(s)):"]
+        for a in attachments:
+            name     = a.get("Name") or a.get("FileName") or "Sin nombre"
+            mime     = a.get("MimeType") or ""
+            link     = a.get("DocumentLink") or a.get("URI") or a.get("FileURL") or "Sin enlace"
+            lines.append(f"- **{name}** ({mime}): {link}")
+
+        return "\n".join(lines)
+
+    except Exception as e:
+        logger.error(f"Error en obtener_adjuntos_ticket_c4c: {e}")
+        return f"Error al consultar adjuntos en SAP C4C: {str(e)}"
+
+
 if __name__ == "__main__":
     mcp.run()

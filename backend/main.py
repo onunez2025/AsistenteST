@@ -335,6 +335,7 @@ TOOL_LABELS: Dict[str, str] = {
     "iniciar_analisis_masivo":                 "Iniciando análisis masivo en background...",
     "verificar_estado_analisis":               "Verificando progreso del análisis...",
     "cancelar_analisis":                       "Cancelando análisis...",
+    "obtener_adjuntos_ticket_c4c":             "Obteniendo adjuntos del ticket en SAP C4C...",
 }
 
 def tool_label(name: str) -> str:
@@ -494,6 +495,7 @@ Usa esta fecha para filtros de 'hoy', 'ayer', 'esta semana', 'este mes', 'este a
 - Pregunta sobre precios de productos, SKU, catálogo o sincronización Magento → MAGENTO.TB_SINCRONIZACION
 - Pregunta sobre ticket de tienda específica → usar herramienta 'consultar_tickets_c4c_por_tienda_y_fecha'
 - Pregunta sobre ticket específico → usar herramienta 'obtener_ticket_c4c_tiempo_real'
+- Pregunta sobre informe técnico, reporte PDF, adjuntos o documentos de un ticket C4C → usar herramienta 'obtener_adjuntos_ticket_c4c'
 
 ━━━ REGLA CRÍTICA — PROHIBICIÓN ABSOLUTA DE INVENTAR DATOS ━━━
 ❌ NUNCA inventes, supongas, extrapoles ni uses datos ficticios bajo ninguna circunstancia.
