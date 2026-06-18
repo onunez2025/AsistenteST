@@ -711,5 +711,79 @@ def calcular_nps_por_tecnico(
     return "\n".join(lines)
 
 
+@mcp.tool()
+def calcular_nps_por_supervisor(
+    survey_id: str,
+    fecha_inicio: str,
+    fecha_fin: str,
+) -> str:
+    """
+    Calcula el NPS agrupado por SUPERVISOR DE SERVICIO TÉCNICO en un rango de fechas.
+    Descarga los datos de Qualtrics UNA SOLA VEZ y agrupa internamente por el campo SEGMENTO_ASIGNADO,
+    que contiene el nombre del supervisor responsable de cada ticket.
+    Filtra por FECHA_DE_VISITA del ticket (no por fecha de respuesta).
+    Úsala cuando el usuario pida el NPS por supervisor, ranking de supervisores, o comparar supervisores.
+
+    Args:
+        survey_id:    ID de la encuesta. La encuesta de Servicio Técnico es 'SV_abEHkdGNsG9a3EG'.
+        fecha_inicio: Fecha de inicio de visita 'YYYY-MM-DD' (ej. '2026-06-01').
+        fecha_fin:    Fecha de fin   de visita 'YYYY-MM-DD' (ej. '2026-06-30').
+    """
+    err = _check_config()
+    if err:
+        return err
+
+    logger.info(f"[MCP TOOL] calcular_nps_por_supervisor: {fecha_inicio}→{fecha_fin}")
+
+    responses = _exportar_respuestas(survey_id, fecha_inicio, fecha_fin)
+    if isinstance(responses, str):
+        return responses
+
+    by_date = _filtrar_por_fecha_visita(responses, fecha_inicio, fecha_fin)
+    if not by_date:
+        return f"No se encontraron encuestas con FECHA_DE_VISITA entre {fecha_inicio} y {fecha_fin}."
+
+    # Agrupar por SEGMENTO_ASIGNADO (supervisor responsable del ticket)
+    supervisores: dict = {}
+    for r in by_date:
+        vals       = r.get("values", {})
+        supervisor = str(vals.get("SEGMENTO_ASIGNADO", "SIN SUPERVISOR")).strip()
+        if not supervisor or supervisor in ("None", "NULL", ""):
+            supervisor = "SIN SUPERVISOR"
+
+        if supervisor not in supervisores:
+            supervisores[supervisor] = {"promotores": 0, "pasivos": 0, "detractores": 0, "total": 0}
+
+        grupo = vals.get("QID9_NPS_GROUP")
+        supervisores[supervisor]["total"] += 1
+        if grupo == 3:
+            supervisores[supervisor]["promotores"] += 1
+        elif grupo == 2:
+            supervisores[supervisor]["pasivos"] += 1
+        elif grupo == 1:
+            supervisores[supervisor]["detractores"] += 1
+
+    # Calcular NPS y ordenar de mejor a peor
+    ranking = []
+    for sup, d in supervisores.items():
+        t   = d["total"]
+        nps = round(((d["promotores"] - d["detractores"]) / t) * 100, 1) if t else 0
+        ranking.append((sup, nps, d["promotores"], d["pasivos"], d["detractores"], t))
+    ranking.sort(key=lambda x: x[1], reverse=True)
+
+    total_global = len(by_date)
+    lines = [
+        f"NPS POR SUPERVISOR DE SERVICIO TÉCNICO",
+        f"Fecha de visita: {fecha_inicio} → {fecha_fin} | Total encuestas: {total_global}",
+        f"(Agrupado por SEGMENTO_ASIGNADO — campo que identifica al supervisor del ticket)\n",
+        f"{'#':<3} {'Supervisor':<35} {'NPS':>6} {'Prom':>5} {'Pas':>5} {'Det':>5} {'Total':>6}",
+        "─" * 70,
+    ]
+    for i, (sup, nps, prom, pas, det, tot) in enumerate(ranking, 1):
+        lines.append(f"{i:<3} {sup[:34]:<35} {nps:>6.1f} {prom:>5} {pas:>5} {det:>5} {tot:>6}")
+
+    return "\n".join(lines)
+
+
 if __name__ == "__main__":
     mcp.run(transport="stdio")

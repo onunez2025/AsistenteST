@@ -306,32 +306,39 @@ class MockToolCall:
         self.type     = type
         self.function = MockFunction(name, arguments)
 
-def _normalize_dsml(n: str) -> str:
-    """Normaliza cualquier variante de tags DSML a la forma canónica <||DSML||...>."""
-    # Acepta cualquier combinación de pipes y espacios: < | DSML | | ...> o <||DSML||...> etc.
-    n = re.sub(r'<([\s|]*)DSML([\s|]*)tool_calls([\s|]*)>',  '<||DSML||tool_calls>', n)
-    n = re.sub(r'</([\s|]*)DSML([\s|]*)tool_calls([\s|]*)>', '</||DSML||tool_calls>', n)
-    n = re.sub(r'<([\s|]*)DSML([\s|]*)invoke',               '<||DSML||invoke', n)
-    n = re.sub(r'</([\s|]*)DSML([\s|]*)invoke([\s|]*)>',     '</||DSML||invoke>', n)
-    n = re.sub(r'<([\s|]*)DSML([\s|]*)parameter',            '<||DSML||parameter', n)
-    n = re.sub(r'</([\s|]*)DSML([\s|]*)parameter([\s|]*)>',  '</||DSML||parameter>', n)
-    return n
-
 def remove_dsml_blocks(content: str) -> str:
-    n = _normalize_dsml(content)
-    # Eliminar el bloque completo tool_calls (greedy para cubrir múltiples invocaciones)
-    n = re.sub(r'<\|\|DSML\|\|tool_calls>[\s\S]*?</\|\|DSML\|\|tool_calls>', '', n)
-    # Fallback: si el tag de cierre falta, eliminar desde la apertura hasta el fin
-    n = re.sub(r'<\|\|DSML\|\|tool_calls>[\s\S]*$', '', n)
+    """Elimina bloques DSML en cualquier variante de formato de pipes/espacios."""
+    # Tag de apertura: < seguido de cualquier cosa que contenga DSML y tool_calls antes de >
+    n = re.sub(
+        r'<[^>]*?DSML[^>]*?tool_calls[^>]*?>[\s\S]*?</[^>]*?DSML[^>]*?tool_calls[^>]*?>',
+        '', content, flags=re.IGNORECASE
+    )
+    # Fallback: sin tag de cierre → eliminar desde apertura hasta fin de string
+    n = re.sub(r'<[^>]*?DSML[^>]*?tool_calls[^>]*?>[\s\S]*$', '', n, flags=re.IGNORECASE)
     return n.strip()
 
 def parse_dsml_tool_calls(content: str) -> list:
+    """
+    Parsea tool calls DSML en cualquier variante:
+      <||DSML||invoke name="fn"> o < | DSML | | invoke name="fn"> etc.
+    """
     tool_calls = []
     try:
-        n = _normalize_dsml(content)
-        for tool_name, body in re.findall(r'<\|\|DSML\|\|invoke name="([^"]+)">([\s\S]+?)(?:</\|\|DSML\|\|invoke>|$)', n):
-            args = {k: v.strip() for k, v in re.findall(r'<\|\|DSML\|\|parameter name="([^"]+)"[^>]*>([\s\S]+?)</\|\|DSML\|\|parameter>', body)}
-            tool_calls.append({"name": tool_name.strip(), "arguments": args})
+        # Detectar bloques invoke: cualquier tag que contenga DSML e invoke con atributo name
+        invoke_re = re.compile(
+            r'<[^>]*?DSML[^>]*?invoke\s+name="([^"]+)"[^>]*?>([\s\S]+?)</[^>]*?DSML[^>]*?invoke[^>]*?>',
+            re.IGNORECASE
+        )
+        param_re = re.compile(
+            r'<[^>]*?DSML[^>]*?parameter\s+name="([^"]+)"[^>]*?>([\s\S]+?)</[^>]*?DSML[^>]*?parameter[^>]*?>',
+            re.IGNORECASE
+        )
+        for m in invoke_re.finditer(content):
+            tool_name = m.group(1).strip()
+            body      = m.group(2)
+            args      = {k: v.strip() for k, v in param_re.findall(body)}
+            tool_calls.append({"name": tool_name, "arguments": args})
+            logger.info(f"[DSML] Parseado: {tool_name} | args: {str(args)[:120]}")
     except Exception as e:
         logger.error(f"DSML parse error: {e}")
     return tool_calls
@@ -360,6 +367,7 @@ TOOL_LABELS: Dict[str, str] = {
     "calcular_nps_por_empresa":                "Calculando NPS de la empresa en Qualtrics...",
     "calcular_nps_comparativo":                "Generando ranking NPS por CAS en Qualtrics...",
     "calcular_nps_por_tecnico":                "Calculando NPS por técnico en Qualtrics...",
+    "calcular_nps_por_supervisor":             "Calculando NPS por supervisor en Qualtrics...",
 }
 
 def tool_label(name: str) -> str:
@@ -527,6 +535,7 @@ Usa esta fecha para filtros de 'hoy', 'ayer', 'esta semana', 'este mes', 'este a
 - Pregunta sobre el NPS de un CAS o empresa en un período → usar 'calcular_nps_por_empresa' (survey_id de Servicio Técnico = 'SV_abEHkdGNsG9a3EG', empresa = nombre/abreviatura del CAS como 'VYA', 'SB2', 'SILAR', etc.)
 - Pregunta sobre ranking o comparativo de NPS entre todos los CAS → usar 'calcular_nps_comparativo'
 - Pregunta sobre NPS por técnico, peores/mejores técnicos, técnicos con más detractores, causas de detractores por técnico, comentarios de clientes insatisfechos por técnico → usar 'calcular_nps_por_tecnico'
+- Pregunta sobre NPS por SUPERVISOR, ranking de supervisores de servicio técnico, comparar supervisores → usar 'calcular_nps_por_supervisor' (descarga datos UNA SOLA VEZ, NO llames a calcular_nps_por_empresa repetidamente por cada CAS)
 - IMPORTANTE: Para encuestas de Servicio Técnico siempre usa survey_id = 'SV_abEHkdGNsG9a3EG' salvo que el usuario indique otra encuesta.
 - NUNCA uses 'buscar_respuesta_por_ticket' para calcular indicadores agregados — esa herramienta es solo para buscar la encuesta de un ticket individual.
 
