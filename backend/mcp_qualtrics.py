@@ -566,5 +566,133 @@ def calcular_nps_comparativo(
     return "\n".join(lines)
 
 
+@mcp.tool()
+def calcular_nps_por_tecnico(
+    survey_id: str,
+    empresa: str,
+    fecha_inicio: str,
+    fecha_fin: str,
+    top_n: int = 5,
+    orden: str = "peor",
+) -> str:
+    """
+    Calcula el NPS por técnico de una empresa/CAS en un rango de fechas (filtrado por FECHA_DE_VISITA).
+    Incluye solo técnicos con volumen de encuestas por encima del promedio del grupo.
+    Muestra causas detractoras y comentarios de los clientes insatisfechos.
+    Úsala cuando el usuario pida el ranking de técnicos por NPS, los peores o mejores técnicos,
+    o quiera saber qué técnicos tienen más detractores dentro de un CAS.
+
+    Args:
+        survey_id:    ID de la encuesta. La encuesta de Servicio Técnico es 'SV_abEHkdGNsG9a3EG'.
+        empresa:      Nombre o abreviatura del CAS (ej. 'BLACK', 'VYA', 'SILAR').
+        fecha_inicio: Fecha de inicio de visita en formato 'YYYY-MM-DD' (ej. '2026-06-01').
+        fecha_fin:    Fecha de fin   de visita en formato 'YYYY-MM-DD' (ej. '2026-06-30').
+        top_n:        Cantidad de técnicos a mostrar (por defecto 5).
+        orden:        'peor' para los de menor NPS primero, 'mejor' para los de mayor NPS primero.
+    """
+    err = _check_config()
+    if err:
+        return err
+
+    logger.info(f"[MCP TOOL] calcular_nps_por_tecnico: empresa={empresa} {fecha_inicio}→{fecha_fin} top={top_n} orden={orden}")
+
+    responses = _exportar_respuestas(survey_id)
+    if isinstance(responses, str):
+        return responses
+
+    # Filtrar por fecha de visita y empresa
+    by_date = _filtrar_por_fecha_visita(responses, fecha_inicio, fecha_fin)
+    empresa_lower = empresa.lower().strip()
+    by_empresa = [
+        r for r in by_date
+        if empresa_lower in str(r.get("values", {}).get("EMPRESA", "")).lower()
+    ]
+
+    if not by_empresa:
+        return (
+            f"No se encontraron encuestas para '{empresa}' con FECHA_DE_VISITA entre "
+            f"{fecha_inicio} y {fecha_fin}."
+        )
+
+    # Agrupar por TECNICO
+    tecnicos: dict = {}
+    for r in by_empresa:
+        vals    = r.get("values", {})
+        labels  = r.get("labels", {})
+        tecnico = str(vals.get("TECNICO", "SIN TECNICO")).strip()
+        if not tecnico or tecnico in ("None", "NULL", ""):
+            tecnico = "SIN TECNICO"
+
+        if tecnico not in tecnicos:
+            tecnicos[tecnico] = {
+                "promotores": 0, "pasivos": 0, "detractores": 0, "total": 0,
+                "scores": [], "aspectos": {}, "comentarios": [],
+            }
+
+        d = tecnicos[tecnico]
+        d["total"] += 1
+        grupo = vals.get("QID9_NPS_GROUP")
+        score = vals.get("QID9")
+        if score is not None:
+            d["scores"].append(score)
+        if grupo == 3:
+            d["promotores"] += 1
+        elif grupo == 2:
+            d["pasivos"] += 1
+        elif grupo == 1:
+            d["detractores"] += 1
+            # Recopilar aspecto y comentario del detractor
+            aspectos = labels.get("QID12", [])
+            if isinstance(aspectos, str):
+                aspectos = [aspectos]
+            for a in aspectos:
+                d["aspectos"][a] = d["aspectos"].get(a, 0) + 1
+            comentario = str(vals.get("QID24_TEXT", "") or "").strip()
+            if comentario and comentario not in ("None", "NULL"):
+                d["comentarios"].append(comentario)
+
+    # Calcular promedio de encuestas por técnico y filtrar los que están por encima
+    total_tecnicos = len(tecnicos)
+    promedio_encuestas = sum(d["total"] for d in tecnicos.values()) / total_tecnicos if total_tecnicos else 0
+
+    ranking = []
+    for tec, d in tecnicos.items():
+        if d["total"] < promedio_encuestas:
+            continue  # excluir técnicos con volumen por debajo del promedio
+        t   = d["total"]
+        nps = round(((d["promotores"] - d["detractores"]) / t) * 100, 1) if t else 0
+        avg_score = round(sum(d["scores"]) / len(d["scores"]), 1) if d["scores"] else 0
+        ranking.append((tec, nps, d["promotores"], d["pasivos"], d["detractores"], t, avg_score, d["aspectos"], d["comentarios"]))
+
+    reverse = (orden.lower() != "peor")
+    ranking.sort(key=lambda x: x[1], reverse=reverse)
+    ranking = ranking[:top_n]
+
+    lines = [
+        f"TOP {top_n} TÉCNICOS ({'PEORES' if orden == 'peor' else 'MEJORES'}) — {empresa.upper()}",
+        f"Fecha de visita: {fecha_inicio} → {fecha_fin}",
+        f"(Solo técnicos con encuestas > promedio del grupo: {promedio_encuestas:.1f})",
+        f"Total encuestas empresa en período: {len(by_empresa)} | Técnicos evaluados: {total_tecnicos}\n",
+    ]
+
+    for i, (tec, nps, prom, pas, det, tot, avg_s, aspectos, comentarios) in enumerate(ranking, 1):
+        lines.append(f"{'─'*60}")
+        lines.append(f"#{i} {tec}")
+        lines.append(f"   NPS: {nps} | Prom: {prom} | Pas: {pas} | Det: {det} | Total: {tot} | Prom. calif: {avg_s}")
+
+        if aspectos:
+            top_asp = sorted(aspectos.items(), key=lambda x: x[1], reverse=True)[:3]
+            lines.append(f"   Causas detractoras: " + " | ".join(f"{a} ({c}x)" for a, c in top_asp))
+
+        if comentarios:
+            lines.append(f"   Comentarios de detractores ({len(comentarios)}):")
+            for c in comentarios[:5]:
+                lines.append(f"     • \"{c}\"")
+            if len(comentarios) > 5:
+                lines.append(f"     ... y {len(comentarios) - 5} comentario(s) más.")
+
+    return "\n".join(lines)
+
+
 if __name__ == "__main__":
     mcp.run(transport="stdio")

@@ -352,6 +352,7 @@ TOOL_LABELS: Dict[str, str] = {
     "obtener_contactos_directorio_qualtrics":  "Consultando directorio de contactos Qualtrics...",
     "calcular_nps_por_empresa":                "Calculando NPS de la empresa en Qualtrics...",
     "calcular_nps_comparativo":                "Generando ranking NPS por CAS en Qualtrics...",
+    "calcular_nps_por_tecnico":                "Calculando NPS por técnico en Qualtrics...",
 }
 
 def tool_label(name: str) -> str:
@@ -517,7 +518,9 @@ Usa esta fecha para filtros de 'hoy', 'ayer', 'esta semana', 'este mes', 'este a
 - Pregunta sobre contactos de clientes en Qualtrics → usar 'obtener_contactos_directorio_qualtrics'
 - Pregunta sobre el NPS de un CAS o empresa en un período → usar 'calcular_nps_por_empresa' (survey_id de Servicio Técnico = 'SV_abEHkdGNsG9a3EG', empresa = nombre/abreviatura del CAS como 'VYA', 'SB2', 'SILAR', etc.)
 - Pregunta sobre ranking o comparativo de NPS entre todos los CAS → usar 'calcular_nps_comparativo'
+- Pregunta sobre NPS por técnico, peores/mejores técnicos, técnicos con más detractores, causas de detractores por técnico, comentarios de clientes insatisfechos por técnico → usar 'calcular_nps_por_tecnico'
 - IMPORTANTE: Para encuestas de Servicio Técnico siempre usa survey_id = 'SV_abEHkdGNsG9a3EG' salvo que el usuario indique otra encuesta.
+- NUNCA uses 'buscar_respuesta_por_ticket' para calcular indicadores agregados — esa herramienta es solo para buscar la encuesta de un ticket individual.
 
 ━━━ REGLA CRÍTICA — PROHIBICIÓN ABSOLUTA DE INVENTAR DATOS ━━━
 ❌ NUNCA inventes, supongas, extrapoles ni uses datos ficticios bajo ninguna circunstancia.
