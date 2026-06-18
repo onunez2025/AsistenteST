@@ -417,13 +417,37 @@ Usa esta fecha para filtros de 'hoy', 'ayer', 'esta semana', 'este mes', 'este a
    Catálogo de motivos asociados al uso de materiales.
    JOIN con ServiciosMateriales para obtener la descripción de cada motivo.
 
-4. EMPLEADOS INTERNOS: [dbo].[GAC_APP_TB_EMPLEADOS]
+4. EMPLEADOS INTERNOS SOLE: [dbo].[GAC_APP_TB_EMPLEADOS]
    - ID_empleado (varchar), Nombre_Empleado, Correo, Puesto, Estado ('A'=Activo, 'I'=Inactivo), Area, Subarea.
+   - NO tiene campo Supervisor directamente — el supervisor de cada empleado SOLE está en la tabla de información adicional (ver punto 4b).
    JOIN con ServiciosViewSQL: ON TRY_CAST(sv.CodigoTecnico AS INT) = TRY_CAST(emp.ID_empleado AS INT) AND ISNUMERIC(sv.CodigoTecnico) = 1
+
+4b. INFORMACIÓN ADICIONAL DE EMPLEADOS SOLE (incluye supervisor): [dbo].[GAC_APP_TB_EMPLEADOS_INFORMACION_ADICIONAL]
+   - Contiene el campo supervisor de cada empleado interno SOLE.
+   - JOIN con GAC_APP_TB_EMPLEADOS: por ID_empleado (explorar columnas exactas con INFORMATION_SCHEMA antes de consultar).
+   - Úsala SIEMPRE que necesites saber el supervisor de un técnico o empleado SOLE.
+   REGLA: Para obtener el supervisor de técnicos SOLE, hacer:
+     SELECT e.ID_empleado, e.Nombre_Empleado, ei.Supervisor  (o el campo equivalente)
+     FROM [dbo].[GAC_APP_TB_EMPLEADOS] e
+     JOIN [dbo].[GAC_APP_TB_EMPLEADOS_INFORMACION_ADICIONAL] ei ON e.ID_empleado = ei.ID_empleado
+     WHERE e.Estado = 'A'
 
 5. TÉCNICOS EXTERNOS (CAS): [dbo].[GAC_APP_TB_COLABORADORES_CAS]
    - Id_colaborar, Nombre_colaborador, Nombre_FSM (prefijado con alias CAS, ej. 'SS CARLOS BEJARANO'), CAS (ID del CAS), Correo, Puesto, Estado, Supervisor.
+   - El campo Supervisor contiene el ID o nombre del supervisor que gestiona ese colaborador CAS.
    JOIN con ServiciosViewSQL: ON col.Nombre_FSM = RTRIM(sv.NombreTecnico) + ' ' + RTRIM(sv.ApellidoTecnico)
+
+   REGLA CRÍTICA — TÉCNICOS TOTALES (SOLE + CAS): Cuando el usuario pregunte por TODOS los técnicos bajo un supervisor
+   (sin distinguir si son SOLE o CAS), debes hacer UNION de ambas fuentes:
+     -- Técnicos CAS bajo el supervisor
+     SELECT Nombre_colaborador AS Tecnico, 'CAS' AS Tipo FROM [dbo].[GAC_APP_TB_COLABORADORES_CAS]
+     WHERE Supervisor = '<id_supervisor>' AND Estado = 'A'
+     UNION ALL
+     -- Técnicos SOLE bajo el supervisor
+     SELECT e.Nombre_Empleado AS Tecnico, 'SOLE' AS Tipo
+     FROM [dbo].[GAC_APP_TB_EMPLEADOS] e
+     JOIN [dbo].[GAC_APP_TB_EMPLEADOS_INFORMACION_ADICIONAL] ei ON e.ID_empleado = ei.ID_empleado
+     WHERE ei.<campo_supervisor> = '<id_supervisor>' AND e.Estado = 'A'
 
 6. CENTROS DE ATENCIÓN AUTORIZADOS: [dbo].[GAC_APP_TB_CAS]
    - ID_CAS, Razon_social, Nombre_CAS, RUC, Direccion_fiscal, Departamento_fiscal, Abrev_nombre_colaboradores.
@@ -514,7 +538,9 @@ Usa esta fecha para filtros de 'hoy', 'ayer', 'esta semana', 'este mes', 'este a
 ━━━ CUÁNDO USAR CADA TABLA ━━━
 - Pregunta sobre servicios, tickets, órdenes, técnicos, estados, fechas de visita → ServiciosViewSQL / Dashboard_FSM
 - Pregunta sobre materiales o repuestos usados en un servicio → ServiciosMateriales + ServiciosMaterialesMotivos
-- Pregunta sobre empleados, nómina interna, puestos, áreas → GAC_APP_TB_EMPLEADOS
+- Pregunta sobre empleados SOLE, nómina interna, puestos, áreas → GAC_APP_TB_EMPLEADOS
+- Pregunta sobre el supervisor de un empleado SOLE → GAC_APP_TB_EMPLEADOS JOIN GAC_APP_TB_EMPLEADOS_INFORMACION_ADICIONAL (explorar columnas primero con INFORMATION_SCHEMA)
+- Pregunta sobre todos los técnicos (SOLE + CAS) bajo un supervisor → UNION de GAC_APP_TB_COLABORADORES_CAS y GAC_APP_TB_EMPLEADOS + GAC_APP_TB_EMPLEADOS_INFORMACION_ADICIONAL
 - Pregunta sobre vehículos, flota, kilometraje, consumo, mantenimiento → GAC_APP_TB_VEHICULOS*
 - Pregunta sobre incentivos, bonos, liquidaciones, pagos → GAC_APP_TB_INCENTIVOS* / GAC_APP_TB_TARIFARIO
 - Pregunta sobre descuentos o deducciones a empleados → GAC_APP_TB_DESCUENTOS_EMP*
