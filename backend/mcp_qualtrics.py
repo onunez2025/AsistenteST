@@ -309,5 +309,215 @@ def obtener_contactos_directorio_qualtrics(campo_busqueda: str = "", valor_busqu
     return "\n".join(lines)
 
 
+def _exportar_respuestas(survey_id: str, fecha_inicio: str = "", fecha_fin: str = "") -> list | str:
+    """Helper interno: descarga todas las respuestas de una encuesta y las devuelve como lista."""
+    payload: dict = {"format": "json"}
+    if fecha_inicio:
+        payload["startDate"] = f"{fecha_inicio}T00:00:00Z"
+    if fecha_fin:
+        payload["endDate"] = f"{fecha_fin}T23:59:59Z"
+
+    try:
+        resp = requests.post(
+            f"{QUALTRICS_BASE_URL}/API/v3/surveys/{survey_id}/export-responses",
+            headers=_headers(), json=payload, timeout=30
+        )
+        if resp.status_code not in (200, 202):
+            return f"Error al iniciar exportación: HTTP {resp.status_code} — {resp.text}"
+        progress_id = resp.json()["result"]["progressId"]
+    except Exception as e:
+        return f"Error iniciando exportación: {str(e)}"
+
+    status_url = f"{QUALTRICS_BASE_URL}/API/v3/surveys/{survey_id}/export-responses/{progress_id}"
+    file_id = None
+    for _ in range(40):
+        time.sleep(3)
+        try:
+            st = requests.get(status_url, headers=_headers(), timeout=30).json().get("result", {})
+            if st.get("status") == "complete":
+                file_id = st.get("fileId")
+                break
+            if st.get("status") == "failed":
+                return f"Exportación fallida: {st}"
+        except Exception:
+            continue
+
+    if not file_id:
+        return "La exportación tardó demasiado. Inténtalo de nuevo."
+
+    try:
+        file_resp = requests.get(
+            f"{QUALTRICS_BASE_URL}/API/v3/surveys/{survey_id}/export-responses/{file_id}/file",
+            headers=_headers(), timeout=60
+        )
+        with zipfile.ZipFile(io.BytesIO(file_resp.content)) as zf:
+            fname = next((n for n in zf.namelist() if n.endswith(".json")), None)
+            return json.loads(zf.read(fname)).get("responses", [])
+    except Exception as e:
+        return f"Error procesando archivo: {str(e)}"
+
+
+@mcp.tool()
+def calcular_nps_por_empresa(
+    survey_id: str,
+    empresa: str,
+    fecha_inicio: str = "",
+    fecha_fin: str = "",
+) -> str:
+    """
+    Calcula el NPS de una empresa/CAS específica en un rango de fechas usando la encuesta de Qualtrics.
+    Fórmula: NPS = ((Promotores - Detractores) / Total encuestas) * 100
+    - Promotores: calificación 9-10
+    - Pasivos:    calificación 7-8
+    - Detractores: calificación 0-6
+
+    Úsala cuando el usuario pida el NPS, la satisfacción o el indicador de encuesta de un CAS o empresa
+    en un período determinado.
+
+    Args:
+        survey_id:    ID de la encuesta (ej. 'SV_abEHkdGNsG9a3EG'). La encuesta principal de
+                      Servicio Técnico es 'SV_abEHkdGNsG9a3EG'.
+        empresa:      Nombre o abreviatura de la empresa/CAS (ej. 'VYA', 'SB2', 'SILAR', 'EMSS').
+                      Se compara contra el campo EMPRESA de la encuesta (coincidencia parcial, sin distinción de mayúsculas).
+        fecha_inicio: Fecha de inicio en formato 'YYYY-MM-DD' (ej. '2026-06-01'). Vacío = sin límite inferior.
+        fecha_fin:    Fecha de fin   en formato 'YYYY-MM-DD' (ej. '2026-06-30'). Vacío = sin límite superior.
+    """
+    err = _check_config()
+    if err:
+        return err
+
+    logger.info(f"[MCP TOOL] calcular_nps_por_empresa: survey={survey_id} empresa={empresa} {fecha_inicio}→{fecha_fin}")
+
+    responses = _exportar_respuestas(survey_id, fecha_inicio, fecha_fin)
+    if isinstance(responses, str):
+        return responses
+
+    empresa_lower = empresa.lower().strip()
+
+    # Filtrar por empresa (campo EMPRESA en values)
+    filtered = [
+        r for r in responses
+        if empresa_lower in str(r.get("values", {}).get("EMPRESA", "")).lower()
+    ]
+
+    if not filtered:
+        return (
+            f"No se encontraron respuestas para la empresa '{empresa}' en la encuesta '{survey_id}' "
+            f"entre {fecha_inicio or 'inicio'} y {fecha_fin or 'hoy'}.\n"
+            f"Total respuestas en el período (todas las empresas): {len(responses)}"
+        )
+
+    promotores  = sum(1 for r in filtered if r.get("values", {}).get("QID9_NPS_GROUP") == 3)
+    pasivos     = sum(1 for r in filtered if r.get("values", {}).get("QID9_NPS_GROUP") == 2)
+    detractores = sum(1 for r in filtered if r.get("values", {}).get("QID9_NPS_GROUP") == 1)
+    total       = len(filtered)
+    nps         = round(((promotores - detractores) / total) * 100, 1) if total else 0
+
+    # Distribución de calificaciones 0-10
+    scores = [r.get("values", {}).get("QID9") for r in filtered if r.get("values", {}).get("QID9") is not None]
+    score_dist = {i: scores.count(i) for i in range(11) if scores.count(i) > 0}
+
+    # Aspectos más mencionados (QID12)
+    aspect_counts: dict = {}
+    for r in filtered:
+        aspects = r.get("labels", {}).get("QID12", [])
+        if isinstance(aspects, list):
+            for a in aspects:
+                aspect_counts[a] = aspect_counts.get(a, 0) + 1
+        elif isinstance(aspects, str):
+            aspect_counts[aspects] = aspect_counts.get(aspects, 0) + 1
+
+    top_aspects = sorted(aspect_counts.items(), key=lambda x: x[1], reverse=True)[:5]
+
+    lines = [
+        f"📊 NPS — {empresa.upper()} | {fecha_inicio or 'inicio'} → {fecha_fin or 'hoy'}",
+        f"",
+        f"Total encuestas : {total}",
+        f"Promotores  (9-10): {promotores} ({round(promotores/total*100,1) if total else 0}%)",
+        f"Pasivos     (7-8) : {pasivos}     ({round(pasivos/total*100,1) if total else 0}%)",
+        f"Detractores (0-6) : {detractores} ({round(detractores/total*100,1) if total else 0}%)",
+        f"",
+        f"NPS = ({promotores} - {detractores}) / {total} × 100 = {nps}",
+        f"",
+        f"Distribución de calificaciones:",
+    ]
+    for score in range(10, -1, -1):
+        cnt = score_dist.get(score, 0)
+        if cnt:
+            bar = "█" * min(cnt, 40)
+            lines.append(f"  {score:>2}: {bar} {cnt}")
+
+    if top_aspects:
+        lines.append(f"\nAspectos más destacados por los clientes:")
+        for aspect, cnt in top_aspects:
+            lines.append(f"  • {aspect}: {cnt} veces")
+
+    return "\n".join(lines)
+
+
+@mcp.tool()
+def calcular_nps_comparativo(
+    survey_id: str,
+    fecha_inicio: str,
+    fecha_fin: str,
+) -> str:
+    """
+    Calcula y compara el NPS de TODAS las empresas/CAS en un rango de fechas, ordenadas de mayor a menor NPS.
+    Úsala cuando el usuario quiera ver un ranking de NPS de todos los CAS o empresas para un período.
+
+    Args:
+        survey_id:    ID de la encuesta. La encuesta principal de Servicio Técnico es 'SV_abEHkdGNsG9a3EG'.
+        fecha_inicio: Fecha de inicio en formato 'YYYY-MM-DD' (ej. '2026-06-01').
+        fecha_fin:    Fecha de fin   en formato 'YYYY-MM-DD' (ej. '2026-06-30').
+    """
+    err = _check_config()
+    if err:
+        return err
+
+    logger.info(f"[MCP TOOL] calcular_nps_comparativo: survey={survey_id} {fecha_inicio}→{fecha_fin}")
+
+    responses = _exportar_respuestas(survey_id, fecha_inicio, fecha_fin)
+    if isinstance(responses, str):
+        return responses
+
+    # Agrupar por EMPRESA
+    empresas: dict = {}
+    for r in responses:
+        vals = r.get("values", {})
+        empresa = str(vals.get("EMPRESA", "SIN EMPRESA")).strip()
+        if not empresa or empresa == "None":
+            empresa = "SIN EMPRESA"
+        if empresa not in empresas:
+            empresas[empresa] = {"promotores": 0, "pasivos": 0, "detractores": 0, "total": 0}
+        grupo = vals.get("QID9_NPS_GROUP")
+        empresas[empresa]["total"] += 1
+        if grupo == 3:
+            empresas[empresa]["promotores"] += 1
+        elif grupo == 2:
+            empresas[empresa]["pasivos"] += 1
+        elif grupo == 1:
+            empresas[empresa]["detractores"] += 1
+
+    # Calcular NPS y ordenar
+    ranking = []
+    for emp, d in empresas.items():
+        t = d["total"]
+        nps = round(((d["promotores"] - d["detractores"]) / t) * 100, 1) if t else 0
+        ranking.append((emp, nps, d["promotores"], d["pasivos"], d["detractores"], t))
+    ranking.sort(key=lambda x: x[1], reverse=True)
+
+    total_global = sum(d["total"] for d in empresas.values())
+    lines = [
+        f"📊 RANKING NPS por CAS/Empresa | {fecha_inicio} → {fecha_fin}",
+        f"Total encuestas en período: {total_global}\n",
+        f"{'#':<3} {'Empresa':<30} {'NPS':>6} {'Prom':>5} {'Pas':>5} {'Det':>5} {'Total':>6}",
+        "-" * 65,
+    ]
+    for i, (emp, nps, prom, pas, det, tot) in enumerate(ranking, 1):
+        lines.append(f"{i:<3} {emp:<30} {nps:>6.1f} {prom:>5} {pas:>5} {det:>5} {tot:>6}")
+
+    return "\n".join(lines)
+
+
 if __name__ == "__main__":
     mcp.run(transport="stdio")
