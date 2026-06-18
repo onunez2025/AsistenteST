@@ -346,6 +346,7 @@ TOOL_LABELS: Dict[str, str] = {
     "verificar_estado_analisis":               "Verificando progreso del análisis...",
     "cancelar_analisis":                       "Cancelando análisis...",
     "obtener_adjuntos_ticket_c4c":             "Obteniendo adjuntos del ticket en SAP C4C...",
+    "analizar_cambio_tipo_servicio_cas":       "Cruzando FSM y C4C para detectar cambios de tipo de servicio...",
     "listar_encuestas_qualtrics":              "Listando encuestas de Qualtrics...",
     "obtener_respuestas_encuesta":             "Descargando respuestas de encuesta Qualtrics...",
     "buscar_respuesta_por_ticket":             "Buscando calificación de encuesta para el ticket...",
@@ -513,6 +514,7 @@ Usa esta fecha para filtros de 'hoy', 'ayer', 'esta semana', 'este mes', 'este a
 - Pregunta sobre ticket de tienda específica → usar herramienta 'consultar_tickets_c4c_por_tienda_y_fecha'
 - Pregunta sobre ticket específico → usar herramienta 'obtener_ticket_c4c_tiempo_real'
 - Pregunta sobre informe técnico, reporte PDF, adjuntos o documentos de un ticket C4C → usar herramienta 'obtener_adjuntos_ticket_c4c'
+- Pregunta sobre cambios de tipo de servicio entre C4C y FSM, malas prácticas de un CAS alterando el tipo de servicio, tickets donde el tipo cambió de INSTALACIÓN a VERIFICACIÓN (o cualquier otra combinación) → usar 'analizar_cambio_tipo_servicio_cas'. El tipo INICIAL viene de C4C (ServiceTermsServiceIssueName) y el tipo FINAL viene de FSM/SQL (campo Servicio). Usar patrones parciales en los parámetros (ej. 'VERIF', 'INSTAL').
 - Pregunta sobre encuestas de satisfacción, Qualtrics, CSAT, NPS de encuestas enviadas a clientes → usar herramientas 'listar_encuestas_qualtrics', 'obtener_respuestas_encuesta' o 'buscar_respuesta_por_ticket'
 - Pregunta sobre la calificación que dio un cliente para un ticket específico → usar 'buscar_respuesta_por_ticket' con el survey_id y ticket_id
 - Pregunta sobre contactos de clientes en Qualtrics → usar 'obtener_contactos_directorio_qualtrics'

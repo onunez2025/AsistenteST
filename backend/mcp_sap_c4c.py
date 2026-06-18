@@ -332,5 +332,172 @@ def obtener_adjuntos_ticket_c4c(ticket_id: str) -> str:
         return f"Error al obtener el informe técnico de SAP C4C: {str(e)}"
 
 
+@mcp.tool()
+def analizar_cambio_tipo_servicio_cas(
+    cas_nombre: str,
+    tipo_servicio_final_like: str,
+    tipo_servicio_inicial_like: str,
+    fecha_inicio: str = "",
+    fecha_fin: str = "",
+) -> str:
+    """
+    Detecta tickets donde el tipo de servicio fue cambiado entre C4C (tipo inicial) y FSM (tipo final).
+    Útil para identificar malas prácticas de un CAS que cambia el tipo de servicio para cerrar tickets
+    como SI-SI cuando no corresponde (ej. cambiar INSTALACIÓN a VERIFICACIÓN DE ÁREA).
+
+    Cruza dos fuentes:
+    - Tipo de servicio FINAL → FSM/SQL: campo 'Servicio' en ServiciosViewSQL.
+    - Tipo de servicio INICIAL → SAP C4C OData: campo 'ServiceTermsServiceIssueName'.
+
+    Devuelve conteo por día y muestra de tickets afectados con técnico asignado.
+
+    Args:
+        cas_nombre:                 Nombre o parte del CAS (ej. 'FAZZIO').
+        tipo_servicio_final_like:   Patrón del tipo FINAL en FSM  (ej. 'VERIF' para VERIFICACIÓN).
+        tipo_servicio_inicial_like: Patrón del tipo INICIAL en C4C (ej. 'INSTAL' para INSTALACIÓN).
+        fecha_inicio: Fecha de visita inicio 'YYYY-MM-DD'. Vacío = sin límite inferior.
+        fecha_fin:    Fecha de visita fin   'YYYY-MM-DD'. Vacío = sin límite superior.
+    """
+    if not SAP_BASE_URL or not SAP_USER or not SAP_PASSWORD:
+        return "Error: credenciales SAP C4C no configuradas."
+
+    logger.info(f"[MCP TOOL] analizar_cambio_tipo_servicio_cas: cas={cas_nombre} final~{tipo_servicio_final_like} inicial~{tipo_servicio_inicial_like} {fecha_inicio}→{fecha_fin}")
+
+    # ── PASO 1: SQL → tickets del CAS con tipo de servicio FINAL coincidente ──
+    import pyodbc
+    SQL_SERVER_   = os.getenv("SQL_SERVER")
+    SQL_DATABASE_ = os.getenv("SQL_DATABASE")
+    SQL_USER_     = os.getenv("SQL_USER")
+    SQL_PASSWORD_ = os.getenv("SQL_PASSWORD")
+
+    if not all([SQL_SERVER_, SQL_DATABASE_, SQL_USER_, SQL_PASSWORD_]):
+        return "Error: credenciales SQL no configuradas."
+
+    try:
+        conn_str = (
+            f"DRIVER={{ODBC Driver 17 for SQL Server}};"
+            f"SERVER={SQL_SERVER_};DATABASE={SQL_DATABASE_};"
+            f"UID={SQL_USER_};PWD={SQL_PASSWORD_};"
+            f"Encrypt=yes;TrustServerCertificate=no;"
+        )
+        conn   = pyodbc.connect(conn_str)
+        cursor = conn.cursor()
+
+        date_filter = ""
+        params = [f"%{cas_nombre}%", f"%{tipo_servicio_final_like}%"]
+        if fecha_inicio:
+            date_filter += " AND FechaVisita >= ?"
+            params.append(fecha_inicio)
+        if fecha_fin:
+            date_filter += " AND FechaVisita <= ?"
+            params.append(fecha_fin)
+
+        sql = f"""
+            SELECT
+                Ticket,
+                Servicio            AS ServicioFSM,
+                CAST(FechaVisita AS DATE) AS FechaVisita,
+                ISNULL(NombreTecnico,'') + ' ' + ISNULL(ApellidoTecnico,'') AS Tecnico
+            FROM [APPGAC].[ServiciosViewSQL]
+            WHERE CAS LIKE ?
+              AND Servicio LIKE ?
+              AND Ticket IS NOT NULL
+              AND Ticket <> ''
+              {date_filter}
+            ORDER BY FechaVisita DESC
+        """
+        cursor.execute(sql, params)
+        rows = cursor.fetchall()
+        conn.close()
+    except Exception as e:
+        return f"Error al consultar SQL: {str(e)}"
+
+    if not rows:
+        return (
+            f"No se encontraron tickets de '{cas_nombre}' con tipo de servicio FSM LIKE '%{tipo_servicio_final_like}%' "
+            f"en el período indicado."
+        )
+
+    # ── PASO 2: C4C OData → tipo de servicio INICIAL por lotes de 30 ──
+    ticket_map = {str(r[0]).strip(): {"fsm": r[1], "fecha": str(r[2]), "tecnico": r[3].strip()} for r in rows}
+    ticket_ids = list(ticket_map.keys())
+
+    headers = {"Content-Type": "application/json", "Accept": "application/json"}
+    auth    = HTTPBasicAuth(SAP_USER, SAP_PASSWORD)
+    c4c_types: dict = {}  # ticket_id → ServiceTermsServiceIssueName
+
+    BATCH = 30
+    for i in range(0, len(ticket_ids), BATCH):
+        lote = ticket_ids[i : i + BATCH]
+        filter_expr = " or ".join(f"ID eq '{tid}'" for tid in lote)
+        url = (
+            f"{SAP_BASE_URL}/ServiceRequestCollection"
+            f"?$filter={filter_expr}"
+            f"&$select=ID,ServiceTermsServiceIssueName"
+            f"&$format=json&$top={BATCH}"
+        )
+        try:
+            resp = requests.get(url, auth=auth, headers=headers, timeout=15)
+            if resp.status_code == 200:
+                for item in resp.json().get("d", {}).get("results", []):
+                    c4c_types[str(item.get("ID", "")).strip()] = item.get("ServiceTermsServiceIssueName", "")
+        except Exception as e:
+            logger.error(f"Error consultando lote C4C: {e}")
+
+    # ── PASO 3: cruzar — quedarse solo con los que cambiaron ──
+    inicial_lower = tipo_servicio_inicial_like.lower()
+    cambios = []
+    for tid, info in ticket_map.items():
+        tipo_inicial = c4c_types.get(tid, "")
+        if inicial_lower in tipo_inicial.lower():
+            cambios.append({
+                "ticket":         tid,
+                "fecha":          info["fecha"],
+                "tipo_inicial":   tipo_inicial,
+                "tipo_final":     info["fsm"],
+                "tecnico":        info["tecnico"],
+            })
+
+    if not cambios:
+        return (
+            f"No se encontraron tickets de '{cas_nombre}' que hayan cambiado de "
+            f"'{tipo_servicio_inicial_like}' (C4C) a '{tipo_servicio_final_like}' (FSM) "
+            f"en el período indicado.\n"
+            f"Tickets evaluados con tipo FSM coincidente: {len(ticket_ids)} | "
+            f"Tipos C4C recuperados: {len(c4c_types)}"
+        )
+
+    # ── PASO 4: agrupar por día ──
+    por_dia: dict = {}
+    for c in cambios:
+        por_dia.setdefault(c["fecha"], []).append(c)
+
+    lines = [
+        f"CAMBIOS DE TIPO DE SERVICIO — {cas_nombre.upper()}",
+        f"  C4C (inicial) LIKE '%{tipo_servicio_inicial_like}%'  →  FSM (final) LIKE '%{tipo_servicio_final_like}%'",
+        f"  Período: {fecha_inicio or 'inicio'} → {fecha_fin or 'hoy'}",
+        f"  Total casos detectados: {len(cambios)} de {len(ticket_ids)} tickets evaluados\n",
+        f"{'Fecha':<12} {'Casos':>5}   Tickets",
+        "─" * 70,
+    ]
+    for fecha in sorted(por_dia.keys(), reverse=True):
+        casos = por_dia[fecha]
+        ids_str = ", ".join(c["ticket"] for c in casos[:8])
+        sufijo  = f"  (+{len(casos)-8} más)" if len(casos) > 8 else ""
+        lines.append(f"{fecha:<12} {len(casos):>5}   {ids_str}{sufijo}")
+
+    lines.append("\nDetalle de casos (primeros 20):")
+    lines.append(f"{'Ticket':<10} {'Fecha':<12} {'Tipo C4C (inicial)':<35} {'Tipo FSM (final)':<30} Técnico")
+    lines.append("─" * 110)
+    for c in cambios[:20]:
+        lines.append(
+            f"{c['ticket']:<10} {c['fecha']:<12} {c['tipo_inicial'][:34]:<35} {c['tipo_final'][:29]:<30} {c['tecnico']}"
+        )
+    if len(cambios) > 20:
+        lines.append(f"... y {len(cambios) - 20} caso(s) más.")
+
+    return "\n".join(lines)
+
+
 if __name__ == "__main__":
     mcp.run()
