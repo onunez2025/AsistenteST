@@ -306,23 +306,29 @@ class MockToolCall:
         self.type     = type
         self.function = MockFunction(name, arguments)
 
+def _normalize_dsml(n: str) -> str:
+    """Normaliza cualquier variante de tags DSML a la forma canónica <||DSML||...>."""
+    # Acepta cualquier combinación de pipes y espacios: < | DSML | | ...> o <||DSML||...> etc.
+    n = re.sub(r'<([\s|]*)DSML([\s|]*)tool_calls([\s|]*)>',  '<||DSML||tool_calls>', n)
+    n = re.sub(r'</([\s|]*)DSML([\s|]*)tool_calls([\s|]*)>', '</||DSML||tool_calls>', n)
+    n = re.sub(r'<([\s|]*)DSML([\s|]*)invoke',               '<||DSML||invoke', n)
+    n = re.sub(r'</([\s|]*)DSML([\s|]*)invoke([\s|]*)>',     '</||DSML||invoke>', n)
+    n = re.sub(r'<([\s|]*)DSML([\s|]*)parameter',            '<||DSML||parameter', n)
+    n = re.sub(r'</([\s|]*)DSML([\s|]*)parameter([\s|]*)>',  '</||DSML||parameter>', n)
+    return n
+
 def remove_dsml_blocks(content: str) -> str:
-    n = content
-    n = re.sub(r'<\s*\|\s*\|\s*DSML\s*\|\s*\|\s*tool_calls\s*>',  '<||DSML||tool_calls>', n)
-    n = re.sub(r'</\s*\|\s*\|\s*DSML\s*\|\s*\|\s*tool_calls\s*>', '</||DSML||tool_calls>', n)
-    return re.sub(r'<\|\|DSML\|\|tool_calls>[\s\S]*?</\|\|DSML\|\|tool_calls>', '', n).strip()
+    n = _normalize_dsml(content)
+    # Eliminar el bloque completo tool_calls (greedy para cubrir múltiples invocaciones)
+    n = re.sub(r'<\|\|DSML\|\|tool_calls>[\s\S]*?</\|\|DSML\|\|tool_calls>', '', n)
+    # Fallback: si el tag de cierre falta, eliminar desde la apertura hasta el fin
+    n = re.sub(r'<\|\|DSML\|\|tool_calls>[\s\S]*$', '', n)
+    return n.strip()
 
 def parse_dsml_tool_calls(content: str) -> list:
     tool_calls = []
     try:
-        n = content
-        n = re.sub(r'<\s*\|\s*\|\s*DSML\s*\|\s*\|\s*tool_calls\s*>',  '<||DSML||tool_calls>', n)
-        n = re.sub(r'</\s*\|\s*\|\s*DSML\s*\|\s*\|\s*tool_calls\s*>', '</||DSML||tool_calls>', n)
-        n = re.sub(r'<\s*\|\s*\|\s*DSML\s*\|\s*\|\s*invoke',          '<||DSML||invoke', n)
-        n = re.sub(r'</\s*\|\s*\|\s*DSML\s*\|\s*\|\s*invoke\s*>',     '</||DSML||invoke>', n)
-        n = re.sub(r'<\s*\|\s*\|\s*DSML\s*\|\s*\|\s*parameter',       '<||DSML||parameter', n)
-        n = re.sub(r'</\s*\|\s*\|\s*DSML\s*\|\s*\|\s*parameter\s*>',  '</||DSML||parameter>', n)
-
+        n = _normalize_dsml(content)
         for tool_name, body in re.findall(r'<\|\|DSML\|\|invoke name="([^"]+)">([\s\S]+?)(?:</\|\|DSML\|\|invoke>|$)', n):
             args = {k: v.strip() for k, v in re.findall(r'<\|\|DSML\|\|parameter name="([^"]+)"[^>]*>([\s\S]+?)</\|\|DSML\|\|parameter>', body)}
             tool_calls.append({"name": tool_name.strip(), "arguments": args})

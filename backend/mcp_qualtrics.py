@@ -309,12 +309,29 @@ def obtener_contactos_directorio_qualtrics(campo_busqueda: str = "", valor_busqu
     return "\n".join(lines)
 
 
-def _exportar_respuestas(survey_id: str) -> list | str:
-    """Helper interno: descarga TODAS las respuestas de una encuesta sin filtro de fecha."""
+def _exportar_respuestas(survey_id: str, fecha_inicio: str = "", fecha_fin: str = "") -> list | str:
+    """
+    Descarga respuestas de una encuesta.
+    Si se pasan fechas, aplica un pre-filtro en el API de Qualtrics con ±45 días de buffer
+    para reducir el volumen, y luego el filtro exacto por FECHA_DE_VISITA se hace en Python.
+    """
+    payload: dict = {"format": "json"}
+    if fecha_inicio or fecha_fin:
+        from datetime import date as _d, timedelta as _td
+        try:
+            if fecha_inicio:
+                d_ini = _d.fromisoformat(fecha_inicio) - _td(days=45)
+                payload["startDate"] = d_ini.isoformat() + "T00:00:00Z"
+            if fecha_fin:
+                d_fin = _d.fromisoformat(fecha_fin) + _td(days=45)
+                payload["endDate"] = d_fin.isoformat() + "T23:59:59Z"
+        except ValueError:
+            pass  # si el formato falla, descarga todo
+
     try:
         resp = requests.post(
             f"{QUALTRICS_BASE_URL}/API/v3/surveys/{survey_id}/export-responses",
-            headers=_headers(), json={"format": "json"}, timeout=30
+            headers=_headers(), json=payload, timeout=30
         )
         if resp.status_code not in (200, 202):
             return f"Error al iniciar exportación: HTTP {resp.status_code} — {resp.text}"
@@ -471,7 +488,7 @@ def calcular_nps_por_empresa(
 
     logger.info(f"[MCP TOOL] calcular_nps_por_empresa: survey={survey_id} empresa={empresa} {fecha_inicio}→{fecha_fin}")
 
-    responses = _exportar_respuestas(survey_id)
+    responses = _exportar_respuestas(survey_id, fecha_inicio, fecha_fin)
     if isinstance(responses, str):
         return responses
 
@@ -517,7 +534,7 @@ def calcular_nps_comparativo(
 
     logger.info(f"[MCP TOOL] calcular_nps_comparativo: survey={survey_id} {fecha_inicio}→{fecha_fin}")
 
-    responses = _exportar_respuestas(survey_id)
+    responses = _exportar_respuestas(survey_id, fecha_inicio, fecha_fin)
     if isinstance(responses, str):
         return responses
 
@@ -596,7 +613,7 @@ def calcular_nps_por_tecnico(
 
     logger.info(f"[MCP TOOL] calcular_nps_por_tecnico: empresa={empresa} {fecha_inicio}→{fecha_fin} top={top_n} orden={orden}")
 
-    responses = _exportar_respuestas(survey_id)
+    responses = _exportar_respuestas(survey_id, fecha_inicio, fecha_fin)
     if isinstance(responses, str):
         return responses
 
