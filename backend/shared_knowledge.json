@@ -43,8 +43,14 @@
   },
   {
     "tema": "Tabla de ventas SAP [SAP].[SD_VENTAS] — filtro obligatorio",
-    "explicacion": "La tabla [SAP].[SD_VENTAS] contiene los datos de ventas provenientes de SAP.\nFILTRO OBLIGATORIO: SIEMPRE incluir WHERE VC_solicitante_codigo = '3000000041' en TODAS las consultas sobre esta tabla. Nunca consultar esta tabla sin este filtro.\nEste código corresponde a MT Industrial / Rinnai (cliente SAP único del proyecto).\nUsar esta tabla para análisis de ventas, facturación, pedidos y comparativos comerciales.",
+    "explicacion": "La tabla [SAP].[SD_VENTAS] contiene los datos de ventas provenientes de SAP.\nFILTRO OBLIGATORIO: SIEMPRE incluir WHERE VC_solicitante_codigo = '3000000041' en TODAS las consultas sobre esta tabla. Nunca consultar esta tabla sin este filtro.\nEste código corresponde a MT Industrial / Rinnai (cliente SAP único del proyecto).\nUsar esta tabla para análisis de ventas, facturación, pedidos y comparativos comerciales.\nLa columna clave para segmentar por área es VC_pedido_motivo — ver regla 'Ventas por área (VC_pedido_motivo) — códigos P16-P21'.",
     "consulta_sql": "-- Ejemplo base de consulta a SD_VENTAS:\nSELECT TOP 10 *\nFROM [SAP].[SD_VENTAS]\nWHERE VC_solicitante_codigo = '3000000041'",
+    "fecha_creacion": "2026-06-18 00:00:00"
+  },
+  {
+    "tema": "Ventas por área (VC_pedido_motivo) — códigos P16-P21 Servicio Técnico AT",
+    "explicacion": "La columna VC_pedido_motivo en [SAP].[SD_VENTAS] identifica a qué área pertenece cada venta.\nLa tabla de referencia es [SAP].[TB_TSM_MOTIVO_PEDIDO] (columnas: VC_Codigo, VC_Descripcion).\n\nCódigos que pertenecen a la Gerencia de Atención al Cliente / Servicio Técnico MT:\n- P16: Servicio Técnico MT Domicilio\n- P17: Servicio Técnico MT Taller\n- P18: Servicio Técnico MT Promoción\n- P19: Servicio Técnico MT Vta. Mostrador\n- P20: Servicio Técnico MT Vta. Provincia\n- P21: Servicio Técnico MT Call Center Caídas\n\nPara filtrar SOLO las ventas del área AT/Servicio Técnico usar: WHERE VC_pedido_motivo IN ('P16','P17','P18','P19','P20','P21')\nPara desglosar ventas por canal del área: GROUP BY VC_pedido_motivo con JOIN a TB_TSM_MOTIVO_PEDIDO.\nSiempre combinar con el filtro obligatorio VC_solicitante_codigo = '3000000041'.",
+    "consulta_sql": "-- Ventas del área AT por canal (mes actual):\nSELECT\n  v.VC_pedido_motivo AS Codigo,\n  m.VC_Descripcion AS Canal,\n  COUNT(*) AS Cantidad_Pedidos\nFROM [SAP].[SD_VENTAS] v\nINNER JOIN [SAP].[TB_TSM_MOTIVO_PEDIDO] m ON v.VC_pedido_motivo = m.VC_Codigo\nWHERE v.VC_solicitante_codigo = '3000000041'\n  AND v.VC_pedido_motivo IN ('P16','P17','P18','P19','P20','P21')\n  AND YEAR(v.VC_creacion) = YEAR(GETDATE())\n  AND MONTH(v.VC_creacion) = MONTH(GETDATE())\nGROUP BY v.VC_pedido_motivo, m.VC_Descripcion\nORDER BY Cantidad_Pedidos DESC",
     "fecha_creacion": "2026-06-18 00:00:00"
   }
 ]
