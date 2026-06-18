@@ -101,8 +101,9 @@ async def lifespan(app: FastAPI):
     backend_dir = os.path.dirname(os.path.abspath(__file__))
     subproc_env = {**os.environ}
 
-    db_params  = StdioServerParameters(command=python_cmd, args=[os.path.join(backend_dir, "mcp_db.py")],      env=subproc_env)
-    sap_params = StdioServerParameters(command=python_cmd, args=[os.path.join(backend_dir, "mcp_sap_c4c.py")], env=subproc_env)
+    db_params        = StdioServerParameters(command=python_cmd, args=[os.path.join(backend_dir, "mcp_db.py")],         env=subproc_env)
+    sap_params       = StdioServerParameters(command=python_cmd, args=[os.path.join(backend_dir, "mcp_sap_c4c.py")],    env=subproc_env)
+    qualtrics_params = StdioServerParameters(command=python_cmd, args=[os.path.join(backend_dir, "mcp_qualtrics.py")],  env=subproc_env)
 
     try:
         db_ctx = stdio_client(db_params)
@@ -122,6 +123,15 @@ async def lifespan(app: FastAPI):
         mcp_sessions["sap"] = sap_ses
         mcp_contexts.append((sap_ctx, sap_sc))
         logger.info("MCP SAP C4C conectado.")
+
+        qualtrics_ctx = stdio_client(qualtrics_params)
+        qualtrics_rw  = await qualtrics_ctx.__aenter__()
+        qualtrics_sc  = ClientSession(qualtrics_rw[0], qualtrics_rw[1])
+        qualtrics_ses = await qualtrics_sc.__aenter__()
+        await qualtrics_ses.initialize()
+        mcp_sessions["qualtrics"] = qualtrics_ses
+        mcp_contexts.append((qualtrics_ctx, qualtrics_sc))
+        logger.info("MCP Qualtrics conectado.")
     except Exception as e:
         logger.error(f"Error arrancando MCP: {e}", exc_info=True)
 
@@ -250,7 +260,7 @@ def parse_attachment_to_text(attachment: Attachment) -> str:
 
 async def get_mcp_tools() -> List[Dict[str, Any]]:
     tools = []
-    for srv in ("db", "sap"):
+    for srv in ("db", "sap", "qualtrics"):
         if srv in mcp_sessions:
             try:
                 res = await mcp_sessions[srv].list_tools()
@@ -336,6 +346,10 @@ TOOL_LABELS: Dict[str, str] = {
     "verificar_estado_analisis":               "Verificando progreso del análisis...",
     "cancelar_analisis":                       "Cancelando análisis...",
     "obtener_adjuntos_ticket_c4c":             "Obteniendo adjuntos del ticket en SAP C4C...",
+    "listar_encuestas_qualtrics":              "Listando encuestas de Qualtrics...",
+    "obtener_respuestas_encuesta":             "Descargando respuestas de encuesta Qualtrics...",
+    "buscar_respuesta_por_ticket":             "Buscando calificación de encuesta para el ticket...",
+    "obtener_contactos_directorio_qualtrics":  "Consultando directorio de contactos Qualtrics...",
 }
 
 def tool_label(name: str) -> str:
@@ -490,12 +504,15 @@ Usa esta fecha para filtros de 'hoy', 'ayer', 'esta semana', 'este mes', 'este a
 - Pregunta sobre herramientas, calibraciones → GAC_APP_TB_EQUIPOS*
 - Pregunta sobre cronogramas o asistencia → GAC_APP_TB_CRONOGRAMA*
 - Pregunta sobre cancelaciones → GAC_APP_TB_CANCELACIONES
-- Pregunta sobre NPS, satisfacción del cliente → GAC_APP_TB_NPS
+- Pregunta sobre NPS, satisfacción del cliente (base de datos interna) → GAC_APP_TB_NPS
 - Pregunta sobre repuestos a CAS → GAC_APP_TB_REPOSICION_REPUESTOS_A_CAS
 - Pregunta sobre precios de productos, SKU, catálogo o sincronización Magento → MAGENTO.TB_SINCRONIZACION
 - Pregunta sobre ticket de tienda específica → usar herramienta 'consultar_tickets_c4c_por_tienda_y_fecha'
 - Pregunta sobre ticket específico → usar herramienta 'obtener_ticket_c4c_tiempo_real'
 - Pregunta sobre informe técnico, reporte PDF, adjuntos o documentos de un ticket C4C → usar herramienta 'obtener_adjuntos_ticket_c4c'
+- Pregunta sobre encuestas de satisfacción, Qualtrics, CSAT, NPS de encuestas enviadas a clientes → usar herramientas 'listar_encuestas_qualtrics', 'obtener_respuestas_encuesta' o 'buscar_respuesta_por_ticket'
+- Pregunta sobre la calificación que dio un cliente para un ticket específico → usar 'buscar_respuesta_por_ticket' con el survey_id y ticket_id
+- Pregunta sobre contactos de clientes en Qualtrics → usar 'obtener_contactos_directorio_qualtrics'
 
 ━━━ REGLA CRÍTICA — PROHIBICIÓN ABSOLUTA DE INVENTAR DATOS ━━━
 ❌ NUNCA inventes, supongas, extrapoles ni uses datos ficticios bajo ninguna circunstancia.
