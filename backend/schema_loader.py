@@ -26,6 +26,7 @@ WHERE
         'ServiciosMateriales', 'ServiciosMaterialesMotivos', 'ServiciosViewSQL'
     ))
     OR (TABLE_SCHEMA = 'MAGENTO' AND TABLE_NAME = 'TB_SINCRONIZACION')
+    OR (TABLE_SCHEMA = 'SAP' AND TABLE_NAME = 'SD_VENTAS')
 ORDER BY TABLE_SCHEMA, TABLE_NAME, ORDINAL_POSITION
 """
 

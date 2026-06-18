@@ -7,8 +7,8 @@
   },
   {
     "tema": "Cálculo de NPS (Net Promoter Score)",
-    "explicacion": "El NPS se calcula desde la tabla [dbo].[GAC_APP_TB_NPS] usando la columna Calificacion_NPS (valores 0-10).\n- Promotores: Calificacion_NPS >= 9\n- Neutros: Calificacion_NPS BETWEEN 7 AND 8\n- Detractores: Calificacion_NPS <= 6\nFórmula: NPS = (COUNT(Promotores) * 100.0 / COUNT(*)) - (COUNT(Detractores) * 100.0 / COUNT(*))\nRango: -100 a +100. Un NPS > 50 es excelente. Filtrar por CAS con la columna CAS de la tabla.",
-    "consulta_sql": "SELECT\n  CAS,\n  COUNT(*) AS Total_Encuestas,\n  SUM(CASE WHEN Calificacion_NPS >= 9 THEN 1 ELSE 0 END) AS Promotores,\n  SUM(CASE WHEN Calificacion_NPS BETWEEN 7 AND 8 THEN 1 ELSE 0 END) AS Neutros,\n  SUM(CASE WHEN Calificacion_NPS <= 6 THEN 1 ELSE 0 END) AS Detractores,\n  ROUND(\n    (SUM(CASE WHEN Calificacion_NPS >= 9 THEN 1.0 ELSE 0 END) / COUNT(*)) * 100\n    - (SUM(CASE WHEN Calificacion_NPS <= 6 THEN 1.0 ELSE 0 END) / COUNT(*)) * 100\n  , 1) AS NPS\nFROM [dbo].[GAC_APP_TB_NPS]\nWHERE Fecha_encuesta >= DATEADD(MONTH, -1, GETDATE())\nGROUP BY CAS\nORDER BY NPS DESC",
+    "explicacion": "El NPS se calcula desde la tabla [dbo].[GAC_APP_TB_NPS] usando la columna Calificacion_NPS (valores 0-10).\n- Promotores: Calificacion_NPS >= 9\n- Neutros: Calificacion_NPS BETWEEN 7 AND 8\n- Detractores: Calificacion_NPS <= 6\nFórmula: NPS = (COUNT(Promotores) * 100.0 / COUNT(*)) - (COUNT(Detractores) * 100.0 / COUNT(*))\nRango: -100 a +100. Un NPS > 50 es excelente. Filtrar por CAS con la columna CAS de la tabla.\n\nMETA DE NPS: 74.5\nCuando el usuario pida comparar el NPS contra la meta, usar 74.5 como valor objetivo. Mostrar si el NPS actual está por encima o por debajo de la meta.",
+    "consulta_sql": "SELECT\n  CAS,\n  COUNT(*) AS Total_Encuestas,\n  SUM(CASE WHEN Calificacion_NPS >= 9 THEN 1 ELSE 0 END) AS Promotores,\n  SUM(CASE WHEN Calificacion_NPS BETWEEN 7 AND 8 THEN 1 ELSE 0 END) AS Neutros,\n  SUM(CASE WHEN Calificacion_NPS <= 6 THEN 1 ELSE 0 END) AS Detractores,\n  ROUND(\n    (SUM(CASE WHEN Calificacion_NPS >= 9 THEN 1.0 ELSE 0 END) / COUNT(*)) * 100\n    - (SUM(CASE WHEN Calificacion_NPS <= 6 THEN 1.0 ELSE 0 END) / COUNT(*)) * 100\n  , 1) AS NPS,\n  74.5 AS Meta_NPS\nFROM [dbo].[GAC_APP_TB_NPS]\nWHERE Fecha_encuesta >= DATEADD(MONTH, -1, GETDATE())\nGROUP BY CAS\nORDER BY NPS DESC",
     "fecha_creacion": "2026-06-16 00:00:00"
   },
   {
@@ -40,5 +40,11 @@
     "explicacion": "Para el reporte mensual de servicios agrupados por CAS se usa [APPGAC].[ServiciosViewSQL].\nIncluir: total de servicios, servicios cerrados, trabajo realizado, solicitudes de nueva visita, y tasa de eficiencia.\nFiltrar por mes usando YEAR(FechaVisita) = YEAR(GETDATE()) AND MONTH(FechaVisita) = MONTH(GETDATE()) para el mes actual.\nSi el usuario pide el mes anterior: MONTH(FechaVisita) = MONTH(DATEADD(MONTH,-1,GETDATE())).\nPara reportes de más de 1 mes usar 'generar_reporte_excel' directamente.",
     "consulta_sql": "SELECT\n  IdCAS,\n  CAS,\n  COUNT(*) AS Total,\n  SUM(CASE WHEN Estado IN ('Closed','Finished') THEN 1 ELSE 0 END) AS Cerrados,\n  SUM(CASE WHEN TrabajoRealizado = 'true' THEN 1 ELSE 0 END) AS Trabajo_OK,\n  SUM(CASE WHEN SolicitaNuevaVisita = 'true' THEN 1 ELSE 0 END) AS Nueva_Visita,\n  ROUND(SUM(CASE WHEN TrabajoRealizado='true' THEN 1.0 ELSE 0 END)/NULLIF(SUM(CASE WHEN Estado IN ('Closed','Finished') THEN 1 ELSE 0 END),0)*100,1) AS Eficiencia_Pct\nFROM [APPGAC].[ServiciosViewSQL]\nWHERE YEAR(FechaVisita) = YEAR(GETDATE()) AND MONTH(FechaVisita) = MONTH(GETDATE())\nGROUP BY IdCAS, CAS\nORDER BY Total DESC",
     "fecha_creacion": "2026-06-16 00:00:00"
+  },
+  {
+    "tema": "Tabla de ventas SAP [SAP].[SD_VENTAS] — filtro obligatorio",
+    "explicacion": "La tabla [SAP].[SD_VENTAS] contiene los datos de ventas provenientes de SAP.\nFILTRO OBLIGATORIO: SIEMPRE incluir WHERE VC_solicitante_codigo = '3000000041' en TODAS las consultas sobre esta tabla. Nunca consultar esta tabla sin este filtro.\nEste código corresponde a MT Industrial / Rinnai (cliente SAP único del proyecto).\nUsar esta tabla para análisis de ventas, facturación, pedidos y comparativos comerciales.",
+    "consulta_sql": "-- Ejemplo base de consulta a SD_VENTAS:\nSELECT TOP 10 *\nFROM [SAP].[SD_VENTAS]\nWHERE VC_solicitante_codigo = '3000000041'",
+    "fecha_creacion": "2026-06-18 00:00:00"
   }
 ]
