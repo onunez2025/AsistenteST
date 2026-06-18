@@ -422,32 +422,37 @@ Usa esta fecha para filtros de 'hoy', 'ayer', 'esta semana', 'este mes', 'este a
    - NO tiene campo Supervisor directamente — el supervisor de cada empleado SOLE está en la tabla de información adicional (ver punto 4b).
    JOIN con ServiciosViewSQL: ON TRY_CAST(sv.CodigoTecnico AS INT) = TRY_CAST(emp.ID_empleado AS INT) AND ISNUMERIC(sv.CodigoTecnico) = 1
 
-4b. INFORMACIÓN ADICIONAL DE EMPLEADOS SOLE (incluye supervisor): [dbo].[GAC_APP_TB_EMPLEADOS_INFORMACION_ADICIONAL]
-   - Contiene el campo supervisor de cada empleado interno SOLE.
-   - JOIN con GAC_APP_TB_EMPLEADOS: por ID_empleado (explorar columnas exactas con INFORMATION_SCHEMA antes de consultar).
-   - Úsala SIEMPRE que necesites saber el supervisor de un técnico o empleado SOLE.
-   REGLA: Para obtener el supervisor de técnicos SOLE, hacer:
-     SELECT e.ID_empleado, e.Nombre_Empleado, ei.Supervisor  (o el campo equivalente)
+4b. JEFE DIRECTO DE EMPLEADOS SOLE: [dbo].[GAC_APP_TB_EMPLEADOS_INFORMACION_ADICIONAL]
+   Columnas: Empleado (varchar, ID del empleado = ID_empleado), Jefe_directo (varchar, ID del supervisor),
+             ID_empleado_info_adi, Fecha_inicio (date), Fecha_fin (date).
+   - Fecha_fin IS NULL → relación vigente (supervisor actual).
+   - JOIN con GAC_APP_TB_EMPLEADOS: ON e.ID_empleado = ei.Empleado
+   - Para resolver el nombre del Jefe_directo: JOIN nuevamente con GAC_APP_TB_EMPLEADOS ON jefe.ID_empleado = ei.Jefe_directo
+   EJEMPLO — supervisor actual de técnicos SOLE:
+     SELECT e.ID_empleado, e.Nombre_Empleado, jefe.Nombre_Empleado AS Supervisor
      FROM [dbo].[GAC_APP_TB_EMPLEADOS] e
-     JOIN [dbo].[GAC_APP_TB_EMPLEADOS_INFORMACION_ADICIONAL] ei ON e.ID_empleado = ei.ID_empleado
-     WHERE e.Estado = 'A'
+     JOIN [dbo].[GAC_APP_TB_EMPLEADOS_INFORMACION_ADICIONAL] ei ON e.ID_empleado = ei.Empleado
+     JOIN [dbo].[GAC_APP_TB_EMPLEADOS] jefe ON jefe.ID_empleado = ei.Jefe_directo
+     WHERE e.Estado = 'A' AND ei.Fecha_fin IS NULL
 
 5. TÉCNICOS EXTERNOS (CAS): [dbo].[GAC_APP_TB_COLABORADORES_CAS]
-   - Id_colaborar, Nombre_colaborador, Nombre_FSM (prefijado con alias CAS, ej. 'SS CARLOS BEJARANO'), CAS (ID del CAS), Correo, Puesto, Estado, Supervisor.
-   - El campo Supervisor contiene el ID o nombre del supervisor que gestiona ese colaborador CAS.
+   Columnas: Id_colaborar, Nombre_colaborador, Numero_documento_identidad, Correo, Puesto, Estado,
+             Creado_el, Creado_por, Supervisor (varchar, ID del supervisor SOLE), CAS (ID del CAS),
+             Telefono_colaborador, Nombre_FSM, Modificado_el, Modificado_por, Area, Subarea.
+   - Supervisor contiene el ID_empleado del supervisor SOLE que gestiona ese colaborador CAS.
    JOIN con ServiciosViewSQL: ON col.Nombre_FSM = RTRIM(sv.NombreTecnico) + ' ' + RTRIM(sv.ApellidoTecnico)
 
    REGLA CRÍTICA — TÉCNICOS TOTALES (SOLE + CAS): Cuando el usuario pregunte por TODOS los técnicos bajo un supervisor
    (sin distinguir si son SOLE o CAS), debes hacer UNION de ambas fuentes:
      -- Técnicos CAS bajo el supervisor
      SELECT Nombre_colaborador AS Tecnico, 'CAS' AS Tipo FROM [dbo].[GAC_APP_TB_COLABORADORES_CAS]
-     WHERE Supervisor = '<id_supervisor>' AND Estado = 'A'
+     WHERE Supervisor = '<ID_empleado_supervisor>' AND Estado = 'A'
      UNION ALL
      -- Técnicos SOLE bajo el supervisor
      SELECT e.Nombre_Empleado AS Tecnico, 'SOLE' AS Tipo
      FROM [dbo].[GAC_APP_TB_EMPLEADOS] e
-     JOIN [dbo].[GAC_APP_TB_EMPLEADOS_INFORMACION_ADICIONAL] ei ON e.ID_empleado = ei.ID_empleado
-     WHERE ei.<campo_supervisor> = '<id_supervisor>' AND e.Estado = 'A'
+     JOIN [dbo].[GAC_APP_TB_EMPLEADOS_INFORMACION_ADICIONAL] ei ON e.ID_empleado = ei.Empleado
+     WHERE ei.Jefe_directo = '<ID_empleado_supervisor>' AND ei.Fecha_fin IS NULL AND e.Estado = 'A'
 
 6. CENTROS DE ATENCIÓN AUTORIZADOS: [dbo].[GAC_APP_TB_CAS]
    - ID_CAS, Razon_social, Nombre_CAS, RUC, Direccion_fiscal, Departamento_fiscal, Abrev_nombre_colaboradores.
