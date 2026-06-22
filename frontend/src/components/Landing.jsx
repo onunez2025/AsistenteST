@@ -13,17 +13,34 @@ export default function Landing({ onLoginClick }) {
           Iniciar sesión
         </button>
       </nav>
+
       <div className="landing-hero">
+        <div className="landing-badge">
+          <span>✨</span> Asistente IA · Grupo SOLE
+        </div>
+
         <h1 className="landing-hero-title">
           El asistente inteligente de<br />
           <span>Grupo SOLE / Rinnai</span>
         </h1>
+
         <p className="landing-hero-subtitle">
-          Consulta servicios, NPS, reportes y SAP C4C en lenguaje natural. Conectado en tiempo real a tus sistemas.
+          Consulta servicios, NPS, reportes y SAP C4C en lenguaje natural.
+          Conectado en tiempo real a tus sistemas.
         </p>
-        <button className="landing-cta-btn" onClick={onLoginClick}>
-          Comenzar
-        </button>
+
+        <div className="landing-cta-group">
+          <button className="landing-cta-btn" onClick={onLoginClick}>
+            Comenzar ahora
+          </button>
+        </div>
+
+        <div className="landing-features">
+          <div className="landing-feature-pill"><span>📊</span> NPS en tiempo real</div>
+          <div className="landing-feature-pill"><span>🔧</span> Gestión de servicios</div>
+          <div className="landing-feature-pill"><span>🏢</span> SAP C4C integrado</div>
+          <div className="landing-feature-pill"><span>📈</span> Reportes automáticos</div>
+        </div>
       </div>
     </div>
   );

@@ -94,7 +94,7 @@ function App() {
     const newId = `chat_${Date.now()}`;
     setChats(prev => [{
       id: newId, title: 'Conversación Nueva',
-      messages: [{ role: 'assistant', content: '¡Hola! Soy **SIATC.IA**, tu Asistente de Atención al Cliente de **Grupo SOLE / Rinnai**.\n\n¿En qué puedo ayudarte hoy? Puedes preguntarme sobre tickets, técnicos, reportes, flota, materiales, incentivos, pagos y más.' }],
+      messages: [],
       createdAt: new Date().toISOString()
     }, ...prev]);
     setActiveChatId(newId);

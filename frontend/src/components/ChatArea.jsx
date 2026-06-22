@@ -292,54 +292,55 @@ function ChatArea({
       m.role === 'assistant' ? i : last, -1);
 
     return (
-    <>
-      {activeMessages.map((msg, index) => (
-        <div key={index} className={`message ${msg.role}`}>
-          <div className="avatar">
-            {msg.role === 'assistant' ? <BotSparkleIcon /> : <User size={20} />}
-          </div>
-          <div className="message-content">
-            {msg.role === 'assistant' ? (
-              <>
-                {renderMessageContent(msg.content, index)}
-                <MessageActions
-                  messageContent={msg.content || ''}
-                  onRegenerate={handleRegenerate}
-                  isLastAiMessage={index === lastAiIndex}
-                />
-              </>
-            ) : (
-              <div className="message-content-inner">
+      <>
+        {activeMessages.map((msg, index) => {
+          if (msg.role === 'assistant') {
+            return (
+              <div key={index} className="message-container message-ai">
+                <div className="message-ai-inner">
+                  <div className="message-ai-avatar"><BotSparkleIcon /></div>
+                  <div className="message-ai-body">
+                    <div className="message-ai-name">SIATC.IA</div>
+                    <div className="message-ai-text">
+                      {renderMessageContent(msg.content, index)}
+                    </div>
+                    <MessageActions
+                      messageContent={msg.content || ''}
+                      onRegenerate={handleRegenerate}
+                      isLastAiMessage={index === lastAiIndex}
+                    />
+                  </div>
+                </div>
+              </div>
+            );
+          }
+          return (
+            <div key={index} className="message-container message-user">
+              <div className="message-bubble">
                 <div>{msg.content}</div>
                 {msg.attachment && (
                   <div className="chat-message-attachment">
                     {msg.attachment.type?.startsWith('image/') ? (
-                      <img src={msg.attachment.url || `data:${msg.attachment.type};base64,${msg.attachment.data}`} alt="adjunto" />
+                      <img src={msg.attachment.url || `data:${msg.attachment.type};base64,${msg.attachment.data}`} alt="adjunto" style={{ maxWidth: '240px', borderRadius: '8px', marginTop: '8px' }} />
                     ) : (
-                      <div className="chat-message-attachment-icon"><File size={24} /></div>
-                    )}
-                    <div className="chat-message-attachment-info">
-                      <div className="chat-message-attachment-name">
-                        <a href={msg.attachment.url} download={msg.attachment.name} target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', textDecoration: 'none' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                        <File size={16} />
+                        <a href={msg.attachment.url} download={msg.attachment.name} target="_blank" rel="noopener noreferrer" style={{ color: 'inherit' }}>
                           {msg.attachment.name}
                         </a>
                       </div>
-                      <div className="chat-message-attachment-size">{msg.attachment.type}</div>
-                    </div>
+                    )}
                   </div>
                 )}
               </div>
-            )}
-          </div>
-        </div>
-      ))}
+            </div>
+          );
+        })}
 
-      {/* Burbuja de streaming / progreso */}
-      {renderStreamingBubble()}
-
-      <div ref={messagesEndRef} />
-    </>
-  );
+        {renderStreamingBubble()}
+        <div ref={messagesEndRef} />
+      </>
+    );
   };
 
   return (
