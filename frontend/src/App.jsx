@@ -447,7 +447,7 @@ function App() {
   }
 
   return (
-    <div className="app-container">
+    <div className="app-layout">
       {/* Overlay oscuro para cerrar el sidebar en móvil al tocar fuera */}
       {isSidebarOpen && (
         <div
