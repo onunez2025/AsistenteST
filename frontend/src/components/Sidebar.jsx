@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Menu, Plus, Trash2, MoreVertical, Pin, Edit2, LogOut, ChevronDown } from 'lucide-react';
-import { BotSparkleIcon } from './icons';
+import { SiatcLogoMark } from './icons';
 
 export default function Sidebar({
   isSidebarOpen, setIsSidebarOpen,
@@ -125,8 +125,10 @@ export default function Sidebar({
             <Menu size={20} />
           </button>
           <div className="sidebar-logo">
-            <BotSparkleIcon />
-            <span className="sidebar-logo-text">SIATC.IA</span>
+            <SiatcLogoMark size={28} />
+            <div>
+              <div className="sidebar-logo-text">SIATC<span style={{ color: '#4C5F80', fontWeight: 300 }}>.IA</span></div>
+            </div>
           </div>
         </div>
 

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BotSparkleIcon } from './icons';
+import { SiatcLogoMark } from './icons';
 
 const API_BASE_URL = window.location.hostname === 'localhost' ? 'http://localhost:8000' : '';
 
@@ -44,8 +44,11 @@ const Login = ({ showLoginForm, onBack, onLoginSuccess }) => {
     <div className="login-overlay" onClick={onBack}>
       <div className="login-card" onClick={e => e.stopPropagation()}>
         <div className="login-logo">
-          <BotSparkleIcon />
-          <span className="login-logo-text">SIATC.IA</span>
+          <SiatcLogoMark size={40} />
+          <div>
+            <div className="login-logo-text">SIATC<span style={{ color: '#4C5F80', fontWeight: 300 }}>.IA</span></div>
+            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '1px', letterSpacing: '0.3px' }}>Sistema Integral de Atención al Cliente</div>
+          </div>
         </div>
 
         <h2 className="login-title">Bienvenido</h2>
