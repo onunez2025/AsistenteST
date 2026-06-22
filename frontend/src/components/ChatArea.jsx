@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Menu, Sun, Moon, User, Paperclip, Send, File, Download, Search, Mic, Plus, Trash2, ArrowLeft, Bot, Square } from 'lucide-react';
+import { Menu, Sun, Moon, User, Paperclip, File, Download, Search, Mic, Trash2, ArrowLeft, Square, ArrowUp, ArrowDown } from 'lucide-react';
 import { BotSparkleIcon } from './icons';
 import { parseMarkdown } from '../utils/markdown';
 import SuggestionChips from './SuggestionChips';
@@ -25,7 +25,9 @@ function ChatArea({
   const [isListening, setIsListening] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isMobile, setIsMobile] = useState(() => window.innerWidth <= 768);
+  const [showScrollBtn, setShowScrollBtn] = useState(false);
   const textareaRef = useRef(null);
+  const scrollContainerRef = useRef(null);
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth <= 768);
@@ -66,6 +68,12 @@ function ChatArea({
     recognition.onresult = (event) => { setInputText(prev => prev + (prev ? ' ' : '') + event.results[0][0].transcript); setIsListening(false); };
     recognition.onerror = () => setIsListening(false);
     recognition.onend   = () => setIsListening(false);
+  };
+
+  const handleScroll = () => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    setShowScrollBtn(el.scrollHeight - el.scrollTop - el.clientHeight > 150);
   };
 
   // Agrupación de chats por fecha para la vista de búsqueda
@@ -170,26 +178,21 @@ function ChatArea({
     if (!isLoading) return null;
 
     return (
-      <div className="message assistant">
-        <div className="avatar"><BotSparkleIcon /></div>
-        <div className="message-content">
-          {streamingContent ? (
-            // Texto llegando en tiempo real
-            <div className="message-body streaming-message">
-              <div dangerouslySetInnerHTML={{ __html: parseMarkdown(streamingContent, getFullUrl) }} />
+      <div className="message-container message-ai">
+        <div className="message-ai-inner">
+          <div className="message-ai-avatar">
+            <BotSparkleIcon />
+          </div>
+          <div className="message-ai-body">
+            <div className="message-ai-name">SIATC.IA</div>
+            <div className="message-ai-text">
+              {streamingContent
+                ? <span dangerouslySetInnerHTML={{ __html: parseMarkdown(streamingContent) }} />
+                : <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>Pensando...</span>
+              }
               <span className="streaming-cursor" />
             </div>
-          ) : (
-            // Indicador de progreso antes de que lleguen los primeros tokens
-            <div className="typing-container">
-              <div className="typing-dots">
-                <div className="dot" /><div className="dot" /><div className="dot" />
-              </div>
-              {progressLabel && (
-                <span className="typing-text">{progressLabel}</span>
-              )}
-            </div>
-          )}
+          </div>
         </div>
       </div>
     );
@@ -197,82 +200,87 @@ function ChatArea({
 
   // Input box (se reutiliza en home y en chat activo)
   const renderInputBar = (isCentered = false) => (
-    <div className={`input-box-wrapper ${isCentered ? 'centered-input' : ''}`}>
-      {fileAttachment && (
-        <div className="attachment-preview-container">
-          <div className="attachment-preview-card">
-            {fileAttachment.preview
-              ? <img src={fileAttachment.preview} alt="preview" className="attachment-preview-img" />
-              : <div className="attachment-preview-icon"><File size={20} /></div>
-            }
-            <span className="attachment-preview-name">{fileAttachment.name}</span>
-            <button className="attachment-preview-remove" onClick={() => setFileAttachment(null)}>✕</button>
+    <div className="input-wrapper">
+      <div className="input-bar-container">
+        {/* Tool progress indicator — shown when loading */}
+        {isLoading && progressLabel && (
+          <div className="tool-progress-bar">
+            <div className="tool-spinner" />
+            <span>{progressLabel}</span>
+          </div>
+        )}
+
+        {/* File attachment preview */}
+        {fileAttachment && (
+          <div className="file-preview">
+            <File size={14} />
+            <span className="file-preview-name">{fileAttachment.name}</span>
+            <button
+              className="file-preview-remove"
+              onClick={() => setFileAttachment(null)}
+              title="Quitar archivo"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
+        {/* Main input bar */}
+        <div className="input-bar">
+          <button
+            className="input-icon-btn"
+            onClick={() => fileInputRef.current?.click()}
+            title="Adjuntar archivo"
+            disabled={isLoading && !streamingContent}
+          >
+            <Paperclip size={18} />
+          </button>
+          <input
+            type="file"
+            ref={fileInputRef}
+            style={{ display: 'none' }}
+            onChange={handleFileSelect}
+            accept=".pdf,.xlsx,.xls,.csv,.txt,.png,.jpg,.jpeg,.webp"
+          />
+
+          <textarea
+            ref={textareaRef}
+            value={inputText}
+            onChange={e => { setInputText(e.target.value); resizeTextarea(); }}
+            onKeyDown={handleKeyPress}
+            placeholder="Consulta sobre servicios, NPS, técnicos..."
+            rows={1}
+            disabled={isLoading && !streamingContent}
+          />
+
+          <div className="input-bar-actions">
+            <button
+              className={`input-icon-btn${isListening ? ' listening' : ''}`}
+              onClick={handleVoiceInput}
+              title={isListening ? 'Detener dictado' : 'Dictado por voz'}
+            >
+              <Mic size={18} />
+            </button>
+
+            {isLoading ? (
+              <button className="send-btn stop" onClick={onStopGeneration} title="Detener generación">
+                <Square size={16} />
+              </button>
+            ) : (
+              <button
+                className="send-btn"
+                onClick={() => handleSendMessage()}
+                disabled={!inputText.trim() && !fileAttachment}
+                title="Enviar"
+              >
+                <ArrowUp size={18} />
+              </button>
+            )}
           </div>
         </div>
-      )}
 
-      <div className="input-row-main">
-        <input type="file" ref={fileInputRef} onChange={handleFileSelect} style={{ display: 'none' }} />
-
-        <button
-          className="input-action-btn attach-btn"
-          onClick={() => fileInputRef.current.click()}
-          title="Adjuntar archivo (.pdf, .xlsx, .csv, imágenes)"
-          disabled={isFileUploading || isLoading}
-        >
-          <Plus size={20} />
-        </button>
-
-        <textarea
-          ref={textareaRef}
-          placeholder={isCentered ? "Pregúntale a SIATC.IA sobre servicios, técnicos, flota, pagos..." : "Introduce una pregunta aquí..."}
-          className="chat-textarea"
-          rows="1"
-          value={inputText}
-          onChange={(e) => { setInputText(e.target.value); resizeTextarea(); }}
-          onKeyDown={handleKeyPress}
-          disabled={isLoading}
-        />
-
-        <div className="input-actions-group">
-          {/* Badge y micrófono: solo en desktop */}
-          {!isMobile && (
-            <>
-              <span className="model-select-badge" title="Modelo LLM activo">
-                <Bot size={13} />
-                <span>DeepSeek</span>
-              </span>
-              <button
-                className={`input-action-btn mic-btn ${isListening ? 'listening' : ''}`}
-                onClick={handleVoiceInput}
-                title="Dictar por voz"
-                type="button"
-                disabled={isLoading}
-              >
-                <Mic size={18} />
-              </button>
-            </>
-          )}
-
-          {/* Stop o Enviar */}
-          {isLoading ? (
-            <button
-              className="input-action-btn stop-btn"
-              onClick={onStopGeneration}
-              title="Detener generación"
-            >
-              <Square size={16} fill="currentColor" />
-            </button>
-          ) : (
-            <button
-              className={`input-action-btn send-btn ${(inputText.trim() || fileAttachment) ? 'active' : ''}`}
-              onClick={() => handleSendMessage()}
-              disabled={!inputText.trim() && !fileAttachment}
-              title="Enviar mensaje (Enter)"
-            >
-              <Send size={18} />
-            </button>
-          )}
+        <div className="input-footer-text">
+          SIATC.IA puede cometer errores. Verifica información importante.
         </div>
       </div>
     </div>
@@ -407,15 +415,20 @@ function ChatArea({
           </div>
         ) : (
           <div className="chat-screen">
-            <div className="messages-container">
+            <div className="messages-container" ref={scrollContainerRef} onScroll={handleScroll}>
               {renderMessages()}
             </div>
+            {showScrollBtn && (
+              <button
+                className="scroll-to-bottom"
+                onClick={() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })}
+              >
+                <ArrowDown size={14} /> Bajar
+              </button>
+            )}
             <div className="input-container-fixed">
               <div className="input-max-width-wrapper">
                 {renderInputBar(false)}
-                <div className="disclaimer-text">
-                  SIATC.IA puede cometer errores. Corrobora información crítica con SAP C4C.
-                </div>
               </div>
             </div>
           </div>
