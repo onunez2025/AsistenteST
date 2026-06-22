@@ -6,6 +6,10 @@ import sys
 import uuid
 import base64
 import io
+import time
+import ipaddress
+from collections import defaultdict
+from urllib.parse import urlparse
 import bcrypt
 import jwt
 import pyodbc
@@ -15,7 +19,7 @@ from contextlib import asynccontextmanager
 import pandas as pd
 import requests
 from requests.auth import HTTPBasicAuth
-from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks, Header, UploadFile, File
+from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks, Header, UploadFile, File, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import StreamingResponse
@@ -65,7 +69,11 @@ def get_db_connection():
 
 AZURE_STORAGE_CONNECTION_STRING = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
 AZURE_STORAGE_CONTAINER         = os.getenv("AZURE_STORAGE_CONTAINER", "stecnico")
-JWT_SECRET                      = os.getenv("JWT_SECRET", "super-secret-key-for-siatc-token-gac-sole-rinnai-2026-mt-industrial")
+JWT_SECRET                      = os.getenv("JWT_SECRET")
+if not JWT_SECRET:
+    logger.error("FATAL: JWT_SECRET no está configurada en las variables de entorno. El servidor no puede iniciar de forma segura.")
+    sys.exit(1)
+ALLOWED_ORIGINS = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:3000").split(",") if o.strip()]
 DEEPSEEK_API_KEY                = os.getenv("DEEPSEEK_API_KEY")
 GEMINI_API_KEY                  = os.getenv("GEMINI_API_KEY")
 
@@ -151,8 +159,10 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="SIATC.IA — API", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], allow_credentials=True,
-    allow_methods=["*"], allow_headers=["*"],
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
@@ -181,6 +191,61 @@ class TitleRequest(BaseModel):
     first_message: str
 
 # ---------------------------------------------------------------------------
+# AUTH DEPENDENCY
+# ---------------------------------------------------------------------------
+
+def require_auth(authorization: Optional[str] = Header(None)) -> dict:
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Token de autenticación no proporcionado.")
+    try:
+        return jwt.decode(authorization.split(" ")[1], JWT_SECRET, algorithms=["HS256"])
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Sesión expirada. Por favor, inicia sesión nuevamente.")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Token inválido.")
+
+# ---------------------------------------------------------------------------
+# RATE LIMITING (login)
+# ---------------------------------------------------------------------------
+
+_login_attempts: Dict[str, list] = defaultdict(list)
+_LOGIN_MAX_ATTEMPTS = 5
+_LOGIN_WINDOW_SECS  = 300  # 5 minutos
+
+def _check_login_rate_limit(ip: str) -> None:
+    now = time.time()
+    _login_attempts[ip] = [t for t in _login_attempts[ip] if now - t < _LOGIN_WINDOW_SECS]
+    if len(_login_attempts[ip]) >= _LOGIN_MAX_ATTEMPTS:
+        raise HTTPException(status_code=429, detail="Demasiados intentos de inicio de sesión. Espera 5 minutos e intenta nuevamente.")
+    _login_attempts[ip].append(now)
+
+# ---------------------------------------------------------------------------
+# SSRF PROTECTION
+# ---------------------------------------------------------------------------
+
+_ALLOWED_URL_SCHEMES = {"http", "https"}
+
+def _is_safe_url(url: str) -> bool:
+    try:
+        parsed = urlparse(url)
+        if parsed.scheme not in _ALLOWED_URL_SCHEMES:
+            return False
+        host = parsed.hostname
+        if not host:
+            return False
+        if host in ("localhost", "127.0.0.1", "::1", "0.0.0.0"):
+            return False
+        try:
+            addr = ipaddress.ip_address(host)
+            if addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved:
+                return False
+        except ValueError:
+            pass  # es un hostname, no una IP — permitir
+        return True
+    except Exception:
+        return False
+
+# ---------------------------------------------------------------------------
 # UTILIDADES DE ARCHIVO
 # ---------------------------------------------------------------------------
 
@@ -188,6 +253,8 @@ def parse_attachment_to_text(attachment: Attachment) -> str:
     try:
         file_bytes = None
         if attachment.url:
+            if not _is_safe_url(attachment.url):
+                raise Exception("URL de adjunto no permitida por política de seguridad.")
             resp = requests.get(attachment.url, timeout=15)
             if resp.status_code == 200:
                 file_bytes = resp.content
@@ -742,19 +809,10 @@ async def stream_chat_response(history_messages: List[ChatMessage], latest_messa
 # ---------------------------------------------------------------------------
 
 @app.post("/api/chat/stream")
-async def chat_stream_endpoint(request: ChatRequest, authorization: Optional[str] = Header(None)):
+async def chat_stream_endpoint(request: ChatRequest, _: dict = Depends(require_auth)):
     """Endpoint SSE principal — retorna la respuesta en tiempo real con eventos de progreso."""
     if not DEEPSEEK_API_KEY:
         raise HTTPException(status_code=500, detail="DEEPSEEK_API_KEY no configurada.")
-
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Token de autenticación no proporcionado.")
-    try:
-        jwt.decode(authorization.split(" ")[1], JWT_SECRET, algorithms=["HS256"])
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Sesión expirada. Por favor, inicia sesión nuevamente.")
-    except jwt.InvalidTokenError:
-        raise HTTPException(status_code=401, detail="Token inválido.")
 
     history  = request.messages[:-1]
     latest   = request.messages[-1]
@@ -770,7 +828,7 @@ async def chat_stream_endpoint(request: ChatRequest, authorization: Optional[str
 
 
 @app.post("/api/chat/title")
-async def generate_title_endpoint(request: TitleRequest):
+async def generate_title_endpoint(request: TitleRequest, _: dict = Depends(require_auth)):
     """Genera un título corto para el chat a partir del primer mensaje del usuario."""
     if not DEEPSEEK_API_KEY:
         return {"title": request.first_message[:40]}
@@ -796,7 +854,7 @@ async def generate_title_endpoint(request: TitleRequest):
 
 # Mantener endpoint legacy de polling para compatibilidad
 @app.post("/api/chat")
-async def chat_endpoint(request: ChatRequest, background_tasks: BackgroundTasks):
+async def chat_endpoint(request: ChatRequest, background_tasks: BackgroundTasks, _: dict = Depends(require_auth)):
     if not DEEPSEEK_API_KEY:
         raise HTTPException(status_code=500, detail="DeepSeek API Key no configurada.")
     task_id = str(uuid.uuid4())
@@ -824,7 +882,7 @@ async def _run_legacy_task(task_id: str, history: List[ChatMessage], latest: Cha
 
 
 @app.get("/api/chat/status/{task_id}")
-async def get_task_status(task_id: str):
+async def get_task_status(task_id: str, _: dict = Depends(require_auth)):
     task_data = active_tasks.get(task_id)
     if not task_data:
         raise HTTPException(status_code=404, detail="Tarea no encontrada o expirada.")
@@ -837,7 +895,7 @@ def read_root():
 
 
 @app.get("/api/diagnostic")
-async def diagnostic():
+async def diagnostic(_: dict = Depends(require_auth)):
     reports_path = os.path.join(STATIC_DIR, "reports")
     charts_path  = os.path.join(STATIC_DIR, "charts")
     return {
@@ -851,16 +909,20 @@ async def diagnostic():
 
 
 @app.get("/api/download/{subfolder}/{filename}")
-async def download_file(subfolder: str, filename: str):
+async def download_file(subfolder: str, filename: str, _: dict = Depends(require_auth)):
     import mimetypes
     from fastapi.responses import FileResponse
     if subfolder not in ("reports", "charts"):
         raise HTTPException(status_code=403, detail="Acceso denegado.")
-    filepath = os.path.join(STATIC_DIR, subfolder, filename)
+    safe_filename = os.path.basename(filename)
+    allowed_base  = os.path.realpath(os.path.join(STATIC_DIR, subfolder))
+    filepath      = os.path.realpath(os.path.join(allowed_base, safe_filename))
+    if not filepath.startswith(allowed_base + os.sep) and filepath != allowed_base:
+        raise HTTPException(status_code=403, detail="Acceso denegado.")
     if not os.path.exists(filepath):
         raise HTTPException(status_code=404, detail="Archivo no encontrado.")
     media_type, _ = mimetypes.guess_type(filepath)
-    return FileResponse(path=filepath, media_type=media_type or "application/octet-stream", filename=filename)
+    return FileResponse(path=filepath, media_type=media_type or "application/octet-stream", filename=safe_filename)
 
 
 # ---------------------------------------------------------------------------
@@ -872,7 +934,8 @@ class LoginRequest(BaseModel):
     password: str
 
 @app.post("/api/auth/login")
-async def login_endpoint(req: LoginRequest):
+async def login_endpoint(req: LoginRequest, request: Request):
+    _check_login_rate_limit(request.client.host if request.client else "unknown")
     username = req.username.strip()
     password = req.password.strip()
     if not username or not password:
@@ -895,14 +958,12 @@ async def login_endpoint(req: LoginRequest):
         uid, full_name, db_user, email, pw_hash, role_id, role_name, mgmt_id, mgmt_name, is_active, apps, avatar = row
         if not any(a in (apps or "").upper() for a in ["KIRA", "TCTRL", "ADMIN", "EBM"]):
             raise HTTPException(status_code=403, detail="El usuario no tiene acceso a SIATC.IA.")
-        is_match = False
-        if pw_hash:
-            try:
-                is_match = bcrypt.checkpw(password.encode(), pw_hash.encode())
-            except Exception:
-                pass
-            if not is_match:
-                is_match = (pw_hash == password)
+        if not pw_hash:
+            raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos.")
+        try:
+            is_match = bcrypt.checkpw(password.encode(), pw_hash.encode())
+        except Exception:
+            is_match = False
         if not is_match:
             raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos.")
         token = jwt.encode({
@@ -919,7 +980,7 @@ async def login_endpoint(req: LoginRequest):
         raise
     except Exception as e:
         logger.error(f"Login error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Error en el servidor de autenticación: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error interno del servidor. Contacta al administrador.")
 
 
 @app.get("/api/auth/me")
@@ -935,27 +996,35 @@ async def me_endpoint(authorization: Optional[str] = Header(None)):
         raise HTTPException(status_code=401, detail="Token inválido.")
 
 
+_ALLOWED_UPLOAD_EXTENSIONS = {".pdf", ".xlsx", ".xls", ".csv", ".txt", ".log", ".json", ".xml", ".png", ".jpg", ".jpeg", ".webp"}
+_MAX_UPLOAD_BYTES = 20 * 1024 * 1024  # 20 MB
+
 @app.post("/api/upload")
-async def upload_file_endpoint(file: UploadFile = File(...)):
+async def upload_file_endpoint(file: UploadFile = File(...), _: dict = Depends(require_auth)):
+    ext = os.path.splitext(file.filename or "")[1].lower()
+    if ext not in _ALLOWED_UPLOAD_EXTENSIONS:
+        raise HTTPException(status_code=400, detail=f"Tipo de archivo no permitido: '{ext}'. Solo se aceptan: PDF, Excel, CSV, imágenes y texto.")
+    file_bytes = await file.read()
+    if len(file_bytes) > _MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="El archivo supera el límite de 20 MB.")
+    safe_name = re.sub(r"[^\w.\-]", "_", os.path.basename(file.filename or "file"))
+    unique_filename = f"{uuid.uuid4()}_{safe_name}"
     if not AZURE_STORAGE_CONNECTION_STRING:
         uploads_dir = os.path.join(STATIC_DIR, "uploads")
         os.makedirs(uploads_dir, exist_ok=True)
-        filename = f"{uuid.uuid4()}_{file.filename}"
-        filepath = os.path.join(uploads_dir, filename)
+        filepath = os.path.join(uploads_dir, unique_filename)
         with open(filepath, "wb") as f:
-            f.write(await file.read())
-        return {"url": f"/static/uploads/{filename}"}
+            f.write(file_bytes)
+        return {"url": f"/static/uploads/{unique_filename}"}
     try:
-        file_bytes = await file.read()
-        filename   = f"{uuid.uuid4()}_{file.filename}"
         blob_client = BlobServiceClient.from_connection_string(AZURE_STORAGE_CONNECTION_STRING).get_blob_client(
-            container=AZURE_STORAGE_CONTAINER, blob=f"uploads/{filename}"
+            container=AZURE_STORAGE_CONTAINER, blob=f"uploads/{unique_filename}"
         )
         blob_client.upload_blob(file_bytes, overwrite=True, content_settings=ContentSettings(content_type=file.content_type))
         return {"url": blob_client.url}
     except Exception as e:
         logger.error(f"Upload error: {e}")
-        raise HTTPException(status_code=500, detail=f"Error al subir archivo: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error al subir archivo. Contacta al administrador.")
 
 
 if __name__ == "__main__":
