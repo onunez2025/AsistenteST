@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Menu, Sun, Moon, User, Paperclip, Send, File, Download, Search, Mic, Plus, Trash2, ArrowLeft, Bot, Square } from 'lucide-react';
 import { BotSparkleIcon } from './icons';
 import { parseMarkdown } from '../utils/markdown';
+import SuggestionChips from './SuggestionChips';
 
 function ChatArea({
   isSidebarOpen, setIsSidebarOpen,
@@ -18,7 +19,7 @@ function ChatArea({
   handleSendMessage, handleFileSelect,
   isFileUploading, fileInputRef, messagesEndRef,
   handleExportPNG, getFullUrl,
-  chats, setActiveChatId, handleDeleteChat, formatDateTime
+  chats, activeChatId, setActiveChatId, handleDeleteChat, formatDateTime
 }) {
   const [isListening, setIsListening] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -86,6 +87,15 @@ function ChatArea({
     c.messages.some(m => m.content.toLowerCase().includes(searchQuery.toLowerCase()))
   );
   const searchGroups = groupChatsByDate(filteredChats);
+
+  // Saludo dinámico según hora del día
+  const getGreeting = () => {
+    const h = new Date().getHours();
+    if (h < 12) return 'Buenos días';
+    if (h < 19) return 'Buenas tardes';
+    return 'Buenas noches';
+  };
+  const firstName = user?.full_name?.split(' ')[0] || user?.username || '';
 
   // Renderizado de mensajes con gráficos y Excel
   const renderMessageContent = (content, index) => {
@@ -184,8 +194,8 @@ function ChatArea({
     );
   };
 
-  // Input box (se reutiliza en welcome y en chat activo)
-  const renderInputBox = (isCentered = false) => (
+  // Input box (se reutiliza en home y en chat activo)
+  const renderInputBar = (isCentered = false) => (
     <div className={`input-box-wrapper ${isCentered ? 'centered-input' : ''}`}>
       {fileAttachment && (
         <div className="attachment-preview-container">
@@ -267,34 +277,68 @@ function ChatArea({
     </div>
   );
 
-  return (
-    <div className="chat-area">
-      {/* Header */}
-      <div className="chat-header">
-        <div className="chat-header-left">
-          {!isSidebarOpen && (
-            <button className="header-action-btn" onClick={() => setIsSidebarOpen(true)} title="Abrir menú"><Menu size={20} /></button>
-          )}
-          {activeView === 'search' && (
-            <button className="header-action-btn" onClick={() => setActiveView('chat')} title="Volver al chat"><ArrowLeft size={20} /></button>
-          )}
-          <div className="chat-title-container">
-            <span className="chat-title">SIATC.IA — Asistente de Gestión</span>
-            <span className="chat-subtitle">Grupo SOLE / Rinnai</span>
+  // Render de la lista de mensajes del chat activo
+  const renderMessages = () => (
+    <>
+      {activeMessages.map((msg, index) => (
+        <div key={index} className={`message ${msg.role}`}>
+          <div className="avatar">
+            {msg.role === 'assistant' ? <BotSparkleIcon /> : <User size={20} />}
+          </div>
+          <div className="message-content">
+            {msg.role === 'assistant' ? (
+              renderMessageContent(msg.content, index)
+            ) : (
+              <div className="message-content-inner">
+                <div>{msg.content}</div>
+                {msg.attachment && (
+                  <div className="chat-message-attachment">
+                    {msg.attachment.type?.startsWith('image/') ? (
+                      <img src={msg.attachment.url || `data:${msg.attachment.type};base64,${msg.attachment.data}`} alt="adjunto" />
+                    ) : (
+                      <div className="chat-message-attachment-icon"><File size={24} /></div>
+                    )}
+                    <div className="chat-message-attachment-info">
+                      <div className="chat-message-attachment-name">
+                        <a href={msg.attachment.url} download={msg.attachment.name} target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', textDecoration: 'none' }}>
+                          {msg.attachment.name}
+                        </a>
+                      </div>
+                      <div className="chat-message-attachment-size">{msg.attachment.type}</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
-        <div className="chat-header-right">
-          {/* Indicador de progreso en el header cuando está procesando */}
-          {isLoading && progressLabel && !streamingContent && (
-            <span className="header-progress-label">{progressLabel}</span>
-          )}
-          <button className="header-action-btn" onClick={toggleTheme} title="Cambiar tema">
-            {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
+      ))}
+
+      {/* Burbuja de streaming / progreso */}
+      {renderStreamingBubble()}
+
+      <div ref={messagesEndRef} />
+    </>
+  );
+
+  return (
+    <div className="main-content">
+      {/* Topbar */}
+      <div className="topbar">
+        {!isSidebarOpen && (
+          <button className="topbar-menu-btn" onClick={() => setIsSidebarOpen(true)}>
+            <Menu size={20} />
           </button>
-          <div className="header-user-badge">
-            <div className="user-avatar-small">{(user?.full_name || 'U')[0].toUpperCase()}</div>
-            <span className="user-name-text">{user?.full_name?.split(' ')[0] || username}</span>
-          </div>
+        )}
+        <span className="topbar-title">
+          {activeMessages && activeMessages.length > 0
+            ? (chats?.find(c => c.id === activeChatId)?.title || 'SIATC.IA')
+            : ''}
+        </span>
+        <div className="topbar-actions">
+          <button className="topbar-icon-btn" onClick={toggleTheme} title="Cambiar tema">
+            {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+          </button>
         </div>
       </div>
 
@@ -340,99 +384,29 @@ function ChatArea({
           </div>
         </div>
       ) : (
-        /* Vista de chat */
-        <>
-          {activeMessages.length <= 1 ? (
-            /* Pantalla de bienvenida */
-            <div className="welcome-container">
-              <div className="welcome-greetings">
-                <h1 className="gemini-welcome-title">El escenario es tuyo, {user?.full_name?.split(' ')[0] || 'equipo'}</h1>
-                <h2 className="gemini-welcome-subtitle">¿En qué puedo ayudarte hoy en la gestión técnica y postventa?</h2>
-              </div>
-              <div className="welcome-input-wrapper">{renderInputBox(true)}</div>
-              <div className="welcome-cards-grid">
-                <div className="welcome-card" onClick={() => handleSendMessage('¿Cuántos servicios se completaron esta semana?')}>
-                  <span className="welcome-card-text">Ver volumen de servicios completados esta semana</span>
-                  <span className="welcome-card-icon">⚡</span>
-                </div>
-                <div className="welcome-card" onClick={() => handleSendMessage('¿Qué técnico cerró más servicios este mes?')}>
-                  <span className="welcome-card-text">Ranking de técnicos con más servicios cerrados este mes</span>
-                  <span className="welcome-card-icon">🏆</span>
-                </div>
-                <div className="welcome-card" onClick={() => handleSendMessage('¿Cuáles son las 5 fallas más reportadas este mes?')}>
-                  <span className="welcome-card-text">Fallas y motivos de no atención más frecuentes</span>
-                  <span className="welcome-card-icon">🛠️</span>
-                </div>
-                <div className="welcome-card" onClick={() => handleSendMessage('Genera un reporte Excel de servicios de este mes')}>
-                  <span className="welcome-card-text">Exportar reporte Excel de servicios del mes</span>
-                  <span className="welcome-card-icon">📊</span>
-                </div>
-                <div className="welcome-card" onClick={() => handleSendMessage('¿Qué materiales se usaron más en servicios de reparación este mes?')}>
-                  <span className="welcome-card-text">Materiales y repuestos más utilizados en reparaciones</span>
-                  <span className="welcome-card-icon">🔧</span>
-                </div>
-                <div className="welcome-card" onClick={() => handleSendMessage('¿Cuántos vehículos de la flota están activos y cuáles tienen mantenimiento pendiente?')}>
-                  <span className="welcome-card-text">Estado de la flota vehicular y mantenimientos pendientes</span>
-                  <span className="welcome-card-icon">🚗</span>
+        /* Home screen o Chat screen */
+        (!activeMessages || activeMessages.length === 0) && !isLoading ? (
+          <div className="home-screen">
+            <h1 className="home-greeting">{getGreeting()}, {firstName}</h1>
+            <p className="home-subtitle">¿Cómo puedo ayudarte hoy?</p>
+            <SuggestionChips onSelect={(text) => setInputText(text)} />
+            <div className="welcome-input-wrapper">{renderInputBar(true)}</div>
+          </div>
+        ) : (
+          <div className="chat-screen">
+            <div className="messages-container">
+              {renderMessages()}
+            </div>
+            <div className="input-container-fixed">
+              <div className="input-max-width-wrapper">
+                {renderInputBar(false)}
+                <div className="disclaimer-text">
+                  SIATC.IA puede cometer errores. Corrobora información crítica con SAP C4C.
                 </div>
               </div>
             </div>
-          ) : (
-            /* Chat activo */
-            <>
-              <div className="messages-container">
-                {activeMessages.map((msg, index) => (
-                  <div key={index} className={`message ${msg.role}`}>
-                    <div className="avatar">
-                      {msg.role === 'assistant' ? <BotSparkleIcon /> : <User size={20} />}
-                    </div>
-                    <div className="message-content">
-                      {msg.role === 'assistant' ? (
-                        renderMessageContent(msg.content, index)
-                      ) : (
-                        <div className="message-content-inner">
-                          <div>{msg.content}</div>
-                          {msg.attachment && (
-                            <div className="chat-message-attachment">
-                              {msg.attachment.type?.startsWith('image/') ? (
-                                <img src={msg.attachment.url || `data:${msg.attachment.type};base64,${msg.attachment.data}`} alt="adjunto" />
-                              ) : (
-                                <div className="chat-message-attachment-icon"><File size={24} /></div>
-                              )}
-                              <div className="chat-message-attachment-info">
-                                <div className="chat-message-attachment-name">
-                                  <a href={msg.attachment.url} download={msg.attachment.name} target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', textDecoration: 'none' }}>
-                                    {msg.attachment.name}
-                                  </a>
-                                </div>
-                                <div className="chat-message-attachment-size">{msg.attachment.type}</div>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-
-                {/* Burbuja de streaming / progreso */}
-                {renderStreamingBubble()}
-
-                <div ref={messagesEndRef} />
-              </div>
-
-              {/* Input fijo abajo */}
-              <div className="input-container-fixed">
-                <div className="input-max-width-wrapper">
-                  {renderInputBox(false)}
-                  <div className="disclaimer-text">
-                    SIATC.IA puede cometer errores. Corrobora información crítica con SAP C4C.
-                  </div>
-                </div>
-              </div>
-            </>
-          )}
-        </>
+          </div>
+        )
       )}
     </div>
   );
