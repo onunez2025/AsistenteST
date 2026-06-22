@@ -3,6 +3,7 @@ import { Menu, Sun, Moon, User, Paperclip, Send, File, Download, Search, Mic, Pl
 import { BotSparkleIcon } from './icons';
 import { parseMarkdown } from '../utils/markdown';
 import SuggestionChips from './SuggestionChips';
+import MessageActions from './MessageActions';
 
 function ChatArea({
   isSidebarOpen, setIsSidebarOpen,
@@ -16,7 +17,7 @@ function ChatArea({
   onStopGeneration,
   inputText, setInputText,
   fileAttachment, setFileAttachment,
-  handleSendMessage, handleFileSelect,
+  handleSendMessage, handleRegenerate, handleFileSelect,
   isFileUploading, fileInputRef, messagesEndRef,
   handleExportPNG, getFullUrl,
   chats, activeChatId, setActiveChatId, handleDeleteChat, formatDateTime
@@ -278,7 +279,11 @@ function ChatArea({
   );
 
   // Render de la lista de mensajes del chat activo
-  const renderMessages = () => (
+  const renderMessages = () => {
+    const lastAiIndex = (activeMessages || []).reduce((last, m, i) =>
+      m.role === 'assistant' ? i : last, -1);
+
+    return (
     <>
       {activeMessages.map((msg, index) => (
         <div key={index} className={`message ${msg.role}`}>
@@ -287,7 +292,14 @@ function ChatArea({
           </div>
           <div className="message-content">
             {msg.role === 'assistant' ? (
-              renderMessageContent(msg.content, index)
+              <>
+                {renderMessageContent(msg.content, index)}
+                <MessageActions
+                  messageContent={msg.content || ''}
+                  onRegenerate={handleRegenerate}
+                  isLastAiMessage={index === lastAiIndex}
+                />
+              </>
             ) : (
               <div className="message-content-inner">
                 <div>{msg.content}</div>
@@ -320,6 +332,7 @@ function ChatArea({
       <div ref={messagesEndRef} />
     </>
   );
+  };
 
   return (
     <div className="main-content">

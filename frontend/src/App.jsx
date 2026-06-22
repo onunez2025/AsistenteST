@@ -328,6 +328,28 @@ function App() {
     }
   };
 
+  const handleRegenerate = () => {
+    const msgs = activeMessages;
+    if (!msgs || msgs.length < 2) return;
+    let lastUserMsg = null;
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      if (msgs[i].role === 'user') { lastUserMsg = msgs[i]; break; }
+    }
+    if (!lastUserMsg) return;
+    setChats(prev => prev.map(c => {
+      if (c.id !== activeChatId) return c;
+      const newMsgs = [...(c.messages || [])];
+      while (newMsgs.length > 0 && newMsgs[newMsgs.length - 1].role !== 'user') {
+        newMsgs.pop();
+      }
+      return { ...c, messages: newMsgs };
+    }));
+    setTimeout(() => {
+      setInputText(lastUserMsg.content);
+      setTimeout(() => handleSendMessage(lastUserMsg.content), 100);
+    }, 100);
+  };
+
   // Exportar gráfico Plotly
   const handleExportPNG = (iframeId) => {
     try {
@@ -472,6 +494,7 @@ function App() {
           inputText={inputText} setInputText={setInputText}
           fileAttachment={fileAttachment} setFileAttachment={setFileAttachment}
           handleSendMessage={handleSendMessage}
+          handleRegenerate={handleRegenerate}
           handleFileSelect={handleFileSelect}
           isFileUploading={isFileUploading}
           fileInputRef={fileInputRef}
