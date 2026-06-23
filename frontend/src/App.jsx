@@ -332,6 +332,7 @@ function App() {
       setStreamingContent('');
       setProgressLabel('');
       setIsLoading(false);
+      lastUsageRef.current = null;
       abortControllerRef.current = null;
     }
   };
