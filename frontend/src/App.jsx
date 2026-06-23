@@ -106,7 +106,7 @@ function App() {
   };
 
   const handleDeleteChat = (id, e) => {
-    e.stopPropagation();
+    e?.stopPropagation();
     const filtered = chats.filter(c => c.id !== id);
     setChats(filtered);
     if (activeChatId === id) setActiveChatId(filtered.length > 0 ? filtered[0].id : null);

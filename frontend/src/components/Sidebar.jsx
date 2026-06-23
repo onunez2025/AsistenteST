@@ -13,6 +13,7 @@ export default function Sidebar({
 }) {
   const [activeMenuId, setActiveMenuId] = useState(null);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [renamingChat, setRenamingChat] = useState(null);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
 
   useEffect(() => {
@@ -32,10 +33,14 @@ export default function Sidebar({
   const handleRename = (chatId, currentTitle, e) => {
     stopProp(e);
     setActiveMenuId(null);
-    const newTitle = prompt('Renombrar conversación:', currentTitle);
-    if (newTitle?.trim()) {
-      setChats(prev => prev.map(c => c.id === chatId ? { ...c, title: newTitle.trim() } : c));
+    setRenamingChat({ id: chatId, title: currentTitle || '' });
+  };
+
+  const handleRenameConfirm = () => {
+    if (renamingChat?.title?.trim()) {
+      setChats(prev => prev.map(c => c.id === renamingChat.id ? { ...c, title: renamingChat.title.trim() } : c));
     }
+    setRenamingChat(null);
   };
 
   const handleTogglePin = (chatId, e) => {
@@ -114,6 +119,28 @@ export default function Sidebar({
 
   return (
     <>
+      {renamingChat && (
+        <div className="rename-overlay" onClick={() => setRenamingChat(null)}>
+          <div className="rename-modal" onClick={e => e.stopPropagation()}>
+            <div className="rename-modal-title">Renombrar conversación</div>
+            <input
+              className="rename-modal-input"
+              value={renamingChat.title}
+              onChange={e => setRenamingChat(prev => ({ ...prev, title: e.target.value }))}
+              onKeyDown={e => {
+                if (e.key === 'Enter') handleRenameConfirm();
+                if (e.key === 'Escape') setRenamingChat(null);
+              }}
+              autoFocus
+            />
+            <div className="rename-modal-actions">
+              <button className="rename-cancel-btn" onClick={() => setRenamingChat(null)}>Cancelar</button>
+              <button className="rename-confirm-btn" onClick={handleRenameConfirm}>Guardar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {isMobile && isSidebarOpen && (
         <div className="sidebar-overlay" onClick={() => setIsSidebarOpen(false)} />
       )}
