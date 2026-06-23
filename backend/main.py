@@ -681,6 +681,17 @@ async def stream_chat_response(history_messages: List[ChatMessage], latest_messa
     def sse(data: dict) -> str:
         return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
 
+    def emit_usage(hit, miss, comp):
+        cost = (hit * 0.07 + miss * 0.27 + comp * 1.10) / 1_000_000
+        return sse({
+            "type": "usage",
+            "prompt_cache_hit_tokens":  hit,
+            "prompt_cache_miss_tokens": miss,
+            "completion_tokens":        comp,
+            "total_tokens":             hit + miss + comp,
+            "cost_usd":                 round(cost, 8)
+        })
+
     try:
         tz_lima     = timezone(timedelta(hours=-5))
         now_lima    = datetime.now(tz_lima)
@@ -709,6 +720,10 @@ async def stream_chat_response(history_messages: List[ChatMessage], latest_messa
 
         max_iters = 12
 
+        acc_cache_hit  = 0
+        acc_cache_miss = 0
+        acc_completion = 0
+
         for iteration in range(max_iters):
             # En la iteración final de seguridad, no permitir más tool calls
             kwargs: Dict[str, Any] = {}
@@ -725,6 +740,11 @@ async def stream_chat_response(history_messages: List[ChatMessage], latest_messa
                 max_tokens=8192,
                 **kwargs
             )
+
+            if response.usage:
+                acc_cache_hit  += getattr(response.usage, 'prompt_cache_hit_tokens',  0) or 0
+                acc_cache_miss += getattr(response.usage, 'prompt_cache_miss_tokens', 0) or 0
+                acc_completion += getattr(response.usage, 'completion_tokens',        0) or 0
 
             resp_msg    = response.choices[0].message
             tool_calls  = resp_msg.tool_calls
@@ -754,6 +774,7 @@ async def stream_chat_response(history_messages: List[ChatMessage], latest_messa
                         chunk_size = 20
                         for i in range(0, len(clean), chunk_size):
                             yield sse({"type": "token", "content": clean[i:i + chunk_size]})
+                yield emit_usage(acc_cache_hit, acc_cache_miss, acc_completion)
                 yield sse({"type": "done"})
                 return
 
@@ -797,6 +818,7 @@ async def stream_chat_response(history_messages: List[ChatMessage], latest_messa
 
         # Si se llegó al límite sin respuesta final
         yield sse({"type": "token", "content": "La consulta requirió demasiadas operaciones consecutivas. Por favor, simplifica la pregunta o solicita un reporte Excel para datos masivos."})
+        yield emit_usage(acc_cache_hit, acc_cache_miss, acc_completion)
         yield sse({"type": "done"})
 
     except Exception as e:
