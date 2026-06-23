@@ -26,8 +26,23 @@ function ChatArea({
   const [searchQuery, setSearchQuery] = useState('');
   const [isMobile, setIsMobile] = useState(() => window.innerWidth <= 768);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
+  const [showCostPanel, setShowCostPanel] = useState(false);
   const textareaRef = useRef(null);
   const scrollContainerRef = useRef(null);
+
+  const conversationUsage = React.useMemo(() => {
+    return (activeMessages || []).reduce((acc, msg) => {
+      if (!msg.usage) return acc;
+      return {
+        messages:   acc.messages + 1,
+        cache_hit:  acc.cache_hit  + (msg.usage.prompt_cache_hit_tokens  || 0),
+        cache_miss: acc.cache_miss + (msg.usage.prompt_cache_miss_tokens || 0),
+        completion: acc.completion + (msg.usage.completion_tokens        || 0),
+        total:      acc.total      + (msg.usage.total_tokens             || 0),
+        cost_usd:   acc.cost_usd   + (msg.usage.cost_usd                || 0),
+      };
+    }, { messages: 0, cache_hit: 0, cache_miss: 0, completion: 0, total: 0, cost_usd: 0 });
+  }, [activeMessages]);
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth <= 768);
@@ -309,6 +324,13 @@ function ChatArea({
                       onRegenerate={handleRegenerate}
                       isLastAiMessage={index === lastAiIndex}
                     />
+                    {msg.usage && (
+                      <div className="msg-usage-badge">
+                        🔢 {msg.usage.total_tokens.toLocaleString()} tokens
+                        &nbsp;·&nbsp;
+                        ${msg.usage.cost_usd.toFixed(6)} USD
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -361,6 +383,50 @@ function ChatArea({
           <button className="topbar-icon-btn" onClick={toggleTheme} title="Cambiar tema">
             {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
           </button>
+          {conversationUsage.messages > 0 && (
+            <div style={{ position: 'relative' }}>
+              <button
+                className="topbar-icon-btn"
+                onClick={() => setShowCostPanel(prev => !prev)}
+                title="Ver costo de la conversación"
+                style={{ fontSize: '16px' }}
+              >
+                💰
+              </button>
+
+              {showCostPanel && (
+                <div className="cost-panel">
+                  <div className="cost-panel-title">Costo de esta conversación</div>
+                  <div className="cost-panel-divider" />
+                  <div className="cost-panel-row">
+                    <span>Mensajes analizados</span>
+                    <span>{conversationUsage.messages}</span>
+                  </div>
+                  <div className="cost-panel-row">
+                    <span>Input (cache hit)</span>
+                    <span>{conversationUsage.cache_hit.toLocaleString()} tokens</span>
+                  </div>
+                  <div className="cost-panel-row">
+                    <span>Input (cache miss)</span>
+                    <span>{conversationUsage.cache_miss.toLocaleString()} tokens</span>
+                  </div>
+                  <div className="cost-panel-row">
+                    <span>Output</span>
+                    <span>{conversationUsage.completion.toLocaleString()} tokens</span>
+                  </div>
+                  <div className="cost-panel-divider" />
+                  <div className="cost-panel-row cost-panel-total">
+                    <span>Total tokens</span>
+                    <span>{conversationUsage.total.toLocaleString()}</span>
+                  </div>
+                  <div className="cost-panel-row cost-panel-total">
+                    <span>Costo total</span>
+                    <span>${conversationUsage.cost_usd.toFixed(6)} USD</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
