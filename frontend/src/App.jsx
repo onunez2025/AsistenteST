@@ -279,7 +279,8 @@ function App() {
             case 'usage':
               lastUsageRef.current = event;
               break;
-            case 'done':
+            case 'done': {
+              const capturedUsage = lastUsageRef.current;
               setChats(prev => {
                 const updated = [...prev];
                 const chat    = updated.find(c => c.id === currentChatId);
@@ -287,7 +288,7 @@ function App() {
                   chat.messages.push({
                     role: 'assistant',
                     content: accumulated,
-                    usage: lastUsageRef.current || undefined
+                    usage: capturedUsage || undefined
                   });
                 }
                 return updated;
@@ -298,6 +299,7 @@ function App() {
               setIsLoading(false);
               abortControllerRef.current = null;
               break;
+            }
             case 'error':
               throw new Error(event.message || 'Error desconocido del servidor');
           }
