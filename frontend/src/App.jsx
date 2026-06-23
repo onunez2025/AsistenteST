@@ -82,6 +82,7 @@ function App() {
 
   // AbortController para cancelar el stream
   const abortControllerRef = useRef(null);
+  const lastUsageRef        = useRef(null);
 
   const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   useEffect(() => { scrollToBottom(); }, [chats, activeChatId, isLoading, streamingContent]);
@@ -275,16 +276,23 @@ function App() {
               accumulated += event.content || '';
               setStreamingContent(accumulated);
               break;
+            case 'usage':
+              lastUsageRef.current = event;
+              break;
             case 'done':
-              // Guardar el mensaje final en el chat
               setChats(prev => {
                 const updated = [...prev];
                 const chat    = updated.find(c => c.id === currentChatId);
                 if (chat) {
-                  chat.messages.push({ role: 'assistant', content: accumulated });
+                  chat.messages.push({
+                    role: 'assistant',
+                    content: accumulated,
+                    usage: lastUsageRef.current || undefined
+                  });
                 }
                 return updated;
               });
+              lastUsageRef.current = null;
               setStreamingContent('');
               setProgressLabel('');
               setIsLoading(false);
