@@ -35,6 +35,11 @@ from mcp.client.stdio import stdio_client
 
 # Schema loader (carga dinámica de columnas desde INFORMATION_SCHEMA)
 from schema_loader import load_schemas_for_prompt
+from webhook_qualtrics import (
+    fetch_qualtrics_response,
+    parse_response as wq_parse_response,
+    insert_response as wq_insert_response,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("chatbot-st")
@@ -54,6 +59,8 @@ SQL_SERVER   = os.getenv("SQL_SERVER")
 SQL_DATABASE = os.getenv("SQL_DATABASE")
 SQL_USER     = os.getenv("SQL_USER")
 SQL_PASSWORD = os.getenv("SQL_PASSWORD")
+QUALTRICS_WEBHOOK_SECRET = os.getenv("QUALTRICS_WEBHOOK_SECRET", "")
+QUALTRICS_SURVEY_ST      = os.getenv("QUALTRICS_SURVEY_ST", "")
 
 def get_db_connection():
     conn_str = (
@@ -1120,6 +1127,45 @@ async def upload_file_endpoint(file: UploadFile = File(...), _: dict = Depends(r
     except Exception as e:
         logger.error(f"Upload error: {e}")
         raise HTTPException(status_code=500, detail="Error al subir archivo. Contacta al administrador.")
+
+
+# ---------------------------------------------------------------------------
+# WEBHOOK QUALTRICS
+# ---------------------------------------------------------------------------
+
+@app.post("/webhook/qualtrics")
+async def webhook_qualtrics_endpoint(request: Request, secret: str = ""):
+    if not QUALTRICS_WEBHOOK_SECRET or secret != QUALTRICS_WEBHOOK_SECRET:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    try:
+        body = await request.json()
+    except Exception:
+        return {"status": "ok", "detail": "invalid json"}
+
+    survey_id   = body.get("SurveyID") or body.get("surveyId", "")
+    response_id = body.get("ResponseID") or body.get("responseId", "")
+
+    if survey_id != QUALTRICS_SURVEY_ST:
+        logger.warning(f"Webhook ignorado: surveyId={survey_id} no es ST ({QUALTRICS_SURVEY_ST})")
+        return {"status": "ignored"}
+
+    if not response_id:
+        logger.warning("Webhook recibido sin ResponseID")
+        return {"status": "ok", "detail": "no response_id"}
+
+    try:
+        data = fetch_qualtrics_response(survey_id, response_id)
+        if data:
+            parsed = wq_parse_response(data, survey_id)
+            wq_insert_response(get_db_connection, parsed)
+            logger.info(f"Webhook: respuesta {response_id} insertada en APPGAC.EncuestasServicioTecnico")
+        else:
+            logger.error(f"Webhook: no se pudo obtener response {response_id} de Qualtrics")
+    except Exception as e:
+        logger.error(f"Webhook error procesando {response_id}: {e}", exc_info=True)
+
+    return {"status": "ok"}
 
 
 if __name__ == "__main__":
