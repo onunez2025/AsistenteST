@@ -27,28 +27,8 @@
   --font:          'Lato', 'Google Sans', sans-serif;
 }
 
-/* Tema oscuro vía preferencia del sistema (solo si el usuario no forzó claro) */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg-base:       #1A1C1E;
-    --bg-surface:    #25282C;
-    --bg-hover:      #2E3135;
-    --bg-input:      #2E3135;
-    --bg-chip:       #2E3135;
-    --text-primary:  #E3E5E8;
-    --text-secondary:#9AA0A6;
-    --text-muted:    #6B7280;
-    --color-primary: #7A9CC0;
-    --color-primary-light: rgba(122,156,192,0.15);
-    --color-accent:  #FF6B6B;
-    --border:        #3C4043;
-    --shadow-sm:     0 1px 3px rgba(0,0,0,0.4);
-    --shadow-md:     0 4px 12px rgba(0,0,0,0.5);
-  }
-}
-
-/* Tema oscuro forzado por el botón (data-theme="dark") */
-:root[data-theme="dark"] {
+/* Tema oscuro — convención SIATC (.dark) */
+.dark {
   --bg-base:       #1A1C1E;
   --bg-surface:    #25282C;
   --bg-hover:      #2E3135;
@@ -63,24 +43,6 @@
   --border:        #3C4043;
   --shadow-sm:     0 1px 3px rgba(0,0,0,0.4);
   --shadow-md:     0 4px 12px rgba(0,0,0,0.5);
-}
-
-/* Tema claro forzado por el botón — override la media query */
-:root[data-theme="light"] {
-  --bg-base:       #FAFAFA;
-  --bg-surface:    #FFFFFF;
-  --bg-hover:      #F0F2F5;
-  --bg-input:      #EEF2F8;
-  --bg-chip:       #FFFFFF;
-  --text-primary:  #1A1C1E;
-  --text-secondary:#5F6368;
-  --text-muted:    #9AA0A6;
-  --color-primary: #4C5F80;
-  --color-primary-light: rgba(76,95,128,0.12);
-  --color-accent:  #E93333;
-  --border:        #E0E3E7;
-  --shadow-sm:     0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
-  --shadow-md:     0 4px 12px rgba(0,0,0,0.10);
 }
 
 /* ═══════════════════════════════════════════════
