@@ -53,39 +53,55 @@ export function DialogProvider({ children }) {
               width: '100%',
               background: 'var(--bg-surface)',
               borderRadius: 'var(--radius-lg)',
-              padding: '32px',
+              border: '1px solid var(--border)',
               boxShadow: '0 8px 32px rgba(0,0,0,0.24)',
+              overflow: 'hidden',
             }}
           >
-            <h3 style={{ margin: '0 0 8px 0', color: 'var(--text-primary)', fontWeight: 700, fontSize: '1.1rem' }}>
-              {dialog.title}
-            </h3>
-            <p style={{ margin: '0 0 24px 0', color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: 1.5 }}>
-              {dialog.message}
-            </p>
-            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
+            {/* Header */}
+            <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)' }}>
+              <h3 style={{ margin: 0, color: 'var(--text-primary)', fontWeight: 700, fontSize: '1.05rem' }}>
+                {dialog.title}
+              </h3>
+            </div>
+
+            {/* Body */}
+            <div style={{ padding: '20px 24px' }}>
+              <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: 1.6 }}>
+                {dialog.message}
+              </p>
+            </div>
+
+            {/* Footer */}
+            <div style={{ display: 'flex', gap: 10, padding: '0 24px 24px' }}>
               <button
                 onClick={handleCancel}
                 style={{
+                  flex: 1,
+                  height: 44,
                   border: '1px solid var(--border)',
                   background: 'transparent',
                   color: 'var(--text-primary)',
-                  padding: '8px 20px',
                   borderRadius: 'var(--radius-sm)',
                   cursor: 'pointer',
                   fontSize: '0.875rem',
+                  fontWeight: 600,
                 }}
               >
                 {dialog.cancelLabel}
               </button>
               <button
-                className="login-btn"
                 onClick={handleConfirm}
                 style={{
-                  width: 'auto',
-                  padding: '10px 24px',
+                  flex: 1,
+                  height: 44,
                   background: 'var(--color-accent)',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: 'var(--radius-sm)',
+                  cursor: 'pointer',
                   fontSize: '0.875rem',
+                  fontWeight: 700,
                 }}
               >
                 {dialog.confirmLabel}

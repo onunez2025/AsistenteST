@@ -72,7 +72,10 @@ function App() {
   const [isLoading, setIsLoading]           = useState(false);
   const [streamingContent, setStreamingContent] = useState(''); // texto que va llegando en tiempo real
   const [progressLabel, setProgressLabel]   = useState('');     // "Consultando base de datos..."
-  const [isSidebarOpen, setIsSidebarOpen]   = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen]   = useState(() => {
+    const saved = localStorage.getItem('siatc_sidebar_open');
+    return saved !== null ? saved === 'true' : true;
+  });
   const [isNotebookOpen, setIsNotebookOpen] = useState(false);
   const [fileAttachment, setFileAttachment] = useState(null);
   const [isFileUploading, setIsFileUploading] = useState(false);
@@ -82,6 +85,19 @@ function App() {
   // AbortController para cancelar el stream
   const abortControllerRef = useRef(null);
   const lastUsageRef        = useRef(null);
+
+  useEffect(() => { localStorage.setItem('siatc_sidebar_open', isSidebarOpen); }, [isSidebarOpen]);
+
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
+        e.preventDefault();
+        setIsSidebarOpen(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   useEffect(() => { scrollToBottom(); }, [chats, activeChatId, isLoading, streamingContent]);
