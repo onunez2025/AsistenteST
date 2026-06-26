@@ -481,40 +481,38 @@ function App() {
         searchQuery={searchQuery} setSearchQuery={setSearchQuery}
       />
 
-      {activeView === 'notebook' ? (
+      <ChatArea
+        isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}
+        activeView={activeView} setActiveView={setActiveView}
+        theme={theme} toggleTheme={toggleTheme}
+        user={user} username={username} handleLogout={handleLogout}
+        activeMessages={activeMessages}
+        isLoading={isLoading}
+        streamingContent={streamingContent}
+        progressLabel={progressLabel}
+        onStopGeneration={handleStopGeneration}
+        inputText={inputText} setInputText={setInputText}
+        fileAttachment={fileAttachment} setFileAttachment={setFileAttachment}
+        handleSendMessage={handleSendMessage}
+        handleRegenerate={handleRegenerate}
+        handleFileSelect={handleFileSelect}
+        isFileUploading={isFileUploading}
+        fileInputRef={fileInputRef}
+        messagesEndRef={messagesEndRef}
+        handleExportPNG={handleExportPNG}
+        getFullUrl={getFullUrl}
+        chats={chats} setActiveChatId={setActiveChatId}
+        handleDeleteChat={handleDeleteChat}
+        formatDateTime={formatDateTime}
+      />
+
+      {activeView === 'notebook' && (
         <Notebook
-          activeNote={activeNote} notes={notes} isNotebookOpen={true}
+          activeNote={activeNote}
           onSaveNote={handleSaveNote} onDeleteNote={handleDeleteNote}
           onNewNote={handleNewNote} onSendToChat={handleSendNoteToChat}
           setActiveNote={setActiveNote}
           setIsNotebookOpen={(val) => { if (!val) setActiveView('chat'); }}
-          isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}
-          toggleTheme={toggleTheme} theme={theme} user={user} handleLogout={handleLogout}
-        />
-      ) : (
-        <ChatArea
-          isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}
-          activeView={activeView} setActiveView={setActiveView}
-          theme={theme} toggleTheme={toggleTheme}
-          user={user} username={username} handleLogout={handleLogout}
-          activeMessages={activeMessages}
-          isLoading={isLoading}
-          streamingContent={streamingContent}
-          progressLabel={progressLabel}
-          onStopGeneration={handleStopGeneration}
-          inputText={inputText} setInputText={setInputText}
-          fileAttachment={fileAttachment} setFileAttachment={setFileAttachment}
-          handleSendMessage={handleSendMessage}
-          handleRegenerate={handleRegenerate}
-          handleFileSelect={handleFileSelect}
-          isFileUploading={isFileUploading}
-          fileInputRef={fileInputRef}
-          messagesEndRef={messagesEndRef}
-          handleExportPNG={handleExportPNG}
-          getFullUrl={getFullUrl}
-          chats={chats} setActiveChatId={setActiveChatId}
-          handleDeleteChat={handleDeleteChat}
-          formatDateTime={formatDateTime}
         />
       )}
     </div>
