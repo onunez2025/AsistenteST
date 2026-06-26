@@ -6,8 +6,7 @@ import Notebook from './components/Notebook';
 import Sidebar from './components/Sidebar';
 import ChatArea from './components/ChatArea';
 import { useToast } from './components/Toast';
-
-const API_BASE_URL = window.location.hostname === 'localhost' ? 'http://localhost:8000' : '';
+import { apiClient, API_BASE_URL } from './services/apiClient';
 
 const getFullUrl = (url) => {
   if (!url) return '';
@@ -122,7 +121,11 @@ function App() {
     setFileAttachment({ name: file.name, type: file.type || "application/octet-stream", url: null, preview: file.type.startsWith('image/') ? URL.createObjectURL(file) : null });
     try {
       const fd = new FormData(); fd.append("file", file);
-      const resp = await fetch(`${API_BASE_URL}/api/upload`, { method: "POST", body: fd });
+      const resp = await fetch(`${API_BASE_URL}/api/upload`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('siatc_token')}` },
+        body: fd,
+      });
       if (!resp.ok) throw new Error("No se pudo subir el archivo.");
       const data = await resp.json();
       setFileAttachment(prev => ({ ...prev, url: data.url }));
@@ -147,18 +150,8 @@ function App() {
   // Generar título automático con DeepSeek
   const generateChatTitle = async (firstMessage) => {
     try {
-      const resp = await fetch(`${API_BASE_URL}/api/chat/title`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ first_message: firstMessage })
-      });
-      if (resp.ok) {
-        const data = await resp.json();
-        return data.title || firstMessage.substring(0, 40);
-      }
+      const data = await apiClient.post('/api/chat/title', { first_message: firstMessage });
+      return data.title || firstMessage.substring(0, 40);
     } catch (_) {}
     return firstMessage.length > 40 ? firstMessage.substring(0, 40) + '...' : firstMessage;
   };
@@ -218,19 +211,11 @@ function App() {
     abortControllerRef.current = controller;
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/chat/stream`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        signal: controller.signal,
-        body: JSON.stringify({
-          messages: activeChat.messages.map(m => ({
-            role: m.role, content: m.content, attachment: m.attachment
-          }))
-        })
-      });
+      const response = await apiClient.stream('/api/chat/stream', {
+        messages: activeChat.messages.map(m => ({
+          role: m.role, content: m.content, attachment: m.attachment
+        }))
+      }, controller.signal);
 
       if (!response.ok) {
         if (response.status === 401) {
