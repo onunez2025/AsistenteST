@@ -367,6 +367,8 @@ function ChatArea({
 
   return (
     <div className="main-content">
+      <div className="glow-blob glow-blob-primary" />
+      <div className="glow-blob glow-blob-accent" />
       {/* Topbar */}
       <div className="topbar">
         {!isSidebarOpen && (

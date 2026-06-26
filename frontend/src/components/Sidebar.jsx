@@ -154,84 +154,86 @@ export default function Sidebar({
       )}
 
       <nav className={`sidebar${isSidebarOpen ? '' : ' collapsed'}`}>
-        {/* Header */}
-        <div className="sidebar-header">
-          <button className="sidebar-menu-btn" onClick={() => setIsSidebarOpen(false)}>
-            <Menu size={20} />
-          </button>
-          <div className="sidebar-logo">
-            <SiatcLogoMark size={28} />
-            <div>
-              <div className="sidebar-logo-text">SIATC<span style={{ color: '#4C5F80', fontWeight: 300 }}>.IA</span></div>
+        <div className="sidebar-inner">
+          {/* Header */}
+          <div className="sidebar-header">
+            <button className="sidebar-menu-btn" onClick={() => setIsSidebarOpen(false)}>
+              <Menu size={20} />
+            </button>
+            <div className="sidebar-logo">
+              <SiatcLogoMark size={28} />
+              <div>
+                <div className="sidebar-logo-text">SIATC<span style={{ color: '#4C5F80', fontWeight: 300 }}>.IA</span></div>
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* New chat button */}
-        <button className="sidebar-new-chat-btn" onClick={handleNewChat}>
-          <Plus size={18} />
-          Nueva conversación
-        </button>
+          {/* New chat button */}
+          <button className="sidebar-new-chat-btn" onClick={handleNewChat}>
+            <Plus size={18} />
+            Nueva conversación
+          </button>
 
-        {/* Search */}
-        <div className="sidebar-search-wrap">
-          <input
-            className="sidebar-search-input"
-            placeholder="Buscar conversaciones..."
-            value={searchQuery || ''}
-            onChange={e => setSearchQuery(e.target.value)}
-          />
-        </div>
+          {/* Search */}
+          <div className="sidebar-search-wrap">
+            <input
+              className="sidebar-search-input"
+              placeholder="Buscar conversaciones..."
+              value={searchQuery || ''}
+              onChange={e => setSearchQuery(e.target.value)}
+            />
+          </div>
 
-        {/* Chat list */}
-        <div className="sidebar-list">
-          {pinned.length > 0 && (
-            <>
-              <div className="sidebar-group-label">Ancladas</div>
-              {pinned.map(renderChatItem)}
-            </>
-          )}
-          {Object.entries(groups).map(([label, items]) =>
-            items.length > 0 ? (
-              <React.Fragment key={label}>
-                <div className="sidebar-group-label">{label}</div>
-                {items.map(renderChatItem)}
-              </React.Fragment>
-            ) : null
-          )}
-          {filtered.length === 0 && (
-            <div style={{ padding: '16px 8px', fontSize: '0.875rem', color: 'var(--text-muted)', textAlign: 'center' }}>
-              {searchQuery ? 'Sin resultados' : 'No hay conversaciones aún'}
-            </div>
-          )}
-        </div>
-
-        {/* Footer — user section */}
-        <div className="sidebar-footer">
-          <button
-            className="sidebar-user-btn"
-            onClick={(e) => { stopProp(e); setShowUserMenu(v => !v); }}
-          >
-            <div className="sidebar-avatar">
-              {user?.avatar_url
-                ? <img src={user.avatar_url} alt={user?.full_name || 'avatar'} />
-                : initials
-              }
-            </div>
-            <div className="sidebar-user-info">
-              <div className="sidebar-user-name">{user?.full_name || user?.username || 'Usuario'}</div>
-              <div className="sidebar-user-role">{user?.role_name || 'SIATC.IA'}</div>
-            </div>
-            <ChevronDown size={14} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
-
-            {showUserMenu && (
-              <div className="sidebar-user-menu" onClick={stopProp}>
-                <button className="danger" onClick={(e) => { stopProp(e); handleLogout(); }}>
-                  <LogOut size={14} /> Cerrar sesión
-                </button>
+          {/* Chat list */}
+          <div className="sidebar-list">
+            {pinned.length > 0 && (
+              <>
+                <div className="sidebar-group-label">Ancladas</div>
+                {pinned.map(renderChatItem)}
+              </>
+            )}
+            {Object.entries(groups).map(([label, items]) =>
+              items.length > 0 ? (
+                <React.Fragment key={label}>
+                  <div className="sidebar-group-label">{label}</div>
+                  {items.map(renderChatItem)}
+                </React.Fragment>
+              ) : null
+            )}
+            {filtered.length === 0 && (
+              <div style={{ padding: '16px 8px', fontSize: '0.875rem', color: 'var(--text-muted)', textAlign: 'center' }}>
+                {searchQuery ? 'Sin resultados' : 'No hay conversaciones aún'}
               </div>
             )}
-          </button>
+          </div>
+
+          {/* Footer — user section */}
+          <div className="sidebar-footer">
+            <button
+              className="sidebar-user-btn"
+              onClick={(e) => { stopProp(e); setShowUserMenu(v => !v); }}
+            >
+              <div className="sidebar-avatar">
+                {user?.avatar_url
+                  ? <img src={user.avatar_url} alt={user?.full_name || 'avatar'} />
+                  : initials
+                }
+              </div>
+              <div className="sidebar-user-info">
+                <div className="sidebar-user-name">{user?.full_name || user?.username || 'Usuario'}</div>
+                <div className="sidebar-user-role">{user?.role_name || 'SIATC.IA'}</div>
+              </div>
+              <ChevronDown size={14} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+
+              {showUserMenu && (
+                <div className="sidebar-user-menu" onClick={stopProp}>
+                  <button className="danger" onClick={(e) => { stopProp(e); handleLogout(); }}>
+                    <LogOut size={14} /> Cerrar sesión
+                  </button>
+                </div>
+              )}
+            </button>
+          </div>
         </div>
       </nav>
     </>
