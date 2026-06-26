@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Menu, Plus, Trash2, MoreVertical, Pin, Edit2, LogOut, ChevronDown } from 'lucide-react';
 import { SiatcLogoMark } from './icons';
+import { useDialog } from './DialogContext';
 
 export default function Sidebar({
   isSidebarOpen, setIsSidebarOpen,
@@ -11,6 +12,7 @@ export default function Sidebar({
   user, handleLogout,
   activeView, setActiveView,
 }) {
+  const { confirm } = useDialog();
   const [activeMenuId, setActiveMenuId] = useState(null);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [renamingChat, setRenamingChat] = useState(null);
@@ -49,10 +51,16 @@ export default function Sidebar({
     setChats(prev => prev.map(c => c.id === chatId ? { ...c, pinned: !c.pinned } : c));
   };
 
-  const handleDelete = (chatId, e) => {
+  const handleDelete = async (chatId, e) => {
     stopProp(e);
     setActiveMenuId(null);
-    handleDeleteChat(chatId);
+    const ok = await confirm({
+      title: 'Eliminar conversación',
+      message: '¿Estás seguro? Esta acción no se puede deshacer.',
+      confirmLabel: 'Eliminar',
+      cancelLabel: 'Cancelar',
+    });
+    if (ok) handleDeleteChat(chatId);
   };
 
   const filtered = (chats || []).filter(c =>
