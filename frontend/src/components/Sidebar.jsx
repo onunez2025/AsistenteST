@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Menu, Plus, Trash2, MoreVertical, Pin, Edit2, LogOut, ChevronDown } from 'lucide-react';
 import { SiatcLogoMark } from './icons';
 import { useDialog } from './DialogContext';
+import { apiClient } from '../services/apiClient';
 
 export default function Sidebar({
   isSidebarOpen, setIsSidebarOpen,
@@ -40,7 +41,9 @@ export default function Sidebar({
 
   const handleRenameConfirm = () => {
     if (renamingChat?.title?.trim()) {
-      setChats(prev => prev.map(c => c.id === renamingChat.id ? { ...c, title: renamingChat.title.trim() } : c));
+      const newTitle = renamingChat.title.trim();
+      setChats(prev => prev.map(c => c.id === renamingChat.id ? { ...c, title: newTitle } : c));
+      apiClient.patch(`/api/conversations/${renamingChat.id}`, { title: newTitle }).catch(() => {});
     }
     setRenamingChat(null);
   };
@@ -48,7 +51,10 @@ export default function Sidebar({
   const handleTogglePin = (chatId, e) => {
     stopProp(e);
     setActiveMenuId(null);
-    setChats(prev => prev.map(c => c.id === chatId ? { ...c, pinned: !c.pinned } : c));
+    const current    = chats.find(c => c.id === chatId);
+    const newPinned  = current ? !current.pinned : true;
+    setChats(prev => prev.map(c => c.id === chatId ? { ...c, pinned: newPinned } : c));
+    apiClient.patch(`/api/conversations/${chatId}`, { is_pinned: newPinned }).catch(() => {});
   };
 
   const handleDelete = async (chatId, e) => {

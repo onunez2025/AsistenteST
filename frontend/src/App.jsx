@@ -182,22 +182,33 @@ function App() {
   const getActiveMessages = () => getActiveChat()?.messages || [];
 
   // Nuevo chat
-  const handleNewChat = () => {
-    const newId = `chat_${Date.now()}`;
-    setChats(prev => [{
-      id: newId, title: 'Conversación Nueva',
-      messages: [],
-      createdAt: new Date().toISOString()
-    }, ...prev]);
-    setActiveChatId(newId);
-    setInputText(''); setFileAttachment(null); setActiveView('chat');
-    if (window.innerWidth <= 768)  setIsSidebarOpen(false);
-    if (window.innerWidth <= 1024) setIsNotebookOpen(false);
-    toastInfo("Conversación creada", "Inicia una nueva consulta");
+  const handleNewChat = async () => {
+    try {
+      const conv = await apiClient.post('/api/conversations', { title: 'Conversación Nueva' });
+      setChats(prev => [{
+        id: conv.id, title: conv.title,
+        messages: [],
+        createdAt: conv.created_at,
+        pinned: false,
+      }, ...prev]);
+      setActiveChatId(conv.id);
+      setInputText(''); setFileAttachment(null); setActiveView('chat');
+      if (window.innerWidth <= 768)  setIsSidebarOpen(false);
+      if (window.innerWidth <= 1024) setIsNotebookOpen(false);
+      toastInfo("Conversación creada", "Inicia una nueva consulta");
+    } catch (err) {
+      toastError("Error creando conversación", err.message);
+    }
   };
 
-  const handleDeleteChat = (id, e) => {
+  const handleDeleteChat = async (id, e) => {
     e?.stopPropagation();
+    try {
+      await apiClient.delete(`/api/conversations/${id}`);
+    } catch (err) {
+      toastError("Error eliminando conversación", err.message);
+      return;
+    }
     const filtered = chats.filter(c => c.id !== id);
     setChats(filtered);
     if (activeChatId === id) setActiveChatId(filtered.length > 0 ? filtered[0].id : null);
@@ -266,10 +277,11 @@ function App() {
     let isFirstRealMessage = false;
 
     if (!activeChat) {
-      currentChatId = `chat_${Date.now()}`;
+      const conv = await apiClient.post('/api/conversations', { title: 'Nueva conversación' });
+      currentChatId = conv.id;
       activeChat = {
-        id: currentChatId, title: 'Generando título...',
-        messages: [], createdAt: new Date().toISOString()
+        id: conv.id, title: conv.title,
+        messages: [], createdAt: conv.created_at, pinned: false,
       };
       currentChats = [activeChat, ...currentChats];
       isFirstRealMessage = true;
@@ -284,6 +296,14 @@ function App() {
       attachment: attachmentToSend ? { name: attachmentToSend.name, type: attachmentToSend.type, url: attachmentToSend.url } : undefined
     };
     activeChat.messages.push(userMsg);
+    // Persistir mensaje del usuario (fire-and-forget)
+    apiClient.post(`/api/conversations/${currentChatId}/messages`, {
+      role:            'user',
+      content:         text,
+      attachment_name: attachmentToSend?.name  || null,
+      attachment_type: attachmentToSend?.type  || null,
+      attachment_url:  attachmentToSend?.url   || null,
+    }).catch(() => {});
     setChats([...currentChats]);
     setActiveChatId(currentChatId);
     setIsLoading(true);
@@ -295,6 +315,7 @@ function App() {
     if (isFirstRealMessage && text) {
       generateChatTitle(text).then(title => {
         setChats(prev => prev.map(c => c.id === currentChatId ? { ...c, title } : c));
+        apiClient.patch(`/api/conversations/${currentChatId}`, { title }).catch(() => {});
       });
     }
 
@@ -370,6 +391,10 @@ function App() {
                 }
                 return updated;
               });
+              // Persistir mensaje del asistente (fire-and-forget)
+              apiClient.post(`/api/conversations/${currentChatId}/messages`, {
+                role: 'assistant', content: accumulated,
+              }).catch(() => {});
               lastUsageRef.current = null;
               setStreamingContent('');
               setProgressLabel('');
