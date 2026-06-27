@@ -1,25 +1,27 @@
-import os, sys
+import os
 import pyodbc
 from dotenv import load_dotenv
 
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"), override=True)
 
-conn = pyodbc.connect(
-    f"DRIVER={{ODBC Driver 17 for SQL Server}};"
-    f"SERVER={os.getenv('SQL_SERVER')};"
-    f"DATABASE={os.getenv('SQL_DATABASE')};"
-    f"UID={os.getenv('SQL_USER')};"
-    f"PWD={os.getenv('SQL_PASSWORD')};"
-    f"Encrypt=yes;TrustServerCertificate=no;"
-)
-cursor = conn.cursor()
+conn = None
+try:
+    conn = pyodbc.connect(
+        f"DRIVER={{ODBC Driver 17 for SQL Server}};"
+        f"SERVER={os.getenv('SQL_SERVER')};"
+        f"DATABASE={os.getenv('SQL_DATABASE')};"
+        f"UID={os.getenv('SQL_USER')};"
+        f"PWD={os.getenv('SQL_PASSWORD')};"
+        f"Encrypt=yes;TrustServerCertificate=no;"
+    )
+    cursor = conn.cursor()
 
-cursor.execute("""
+    cursor.execute("""
 IF NOT EXISTS (SELECT * FROM sys.schemas WHERE name = 'KIRA')
     EXEC('CREATE SCHEMA KIRA');
 """)
 
-cursor.execute("""
+    cursor.execute("""
 IF NOT EXISTS (
     SELECT 1 FROM INFORMATION_SCHEMA.TABLES
     WHERE TABLE_SCHEMA = 'KIRA' AND TABLE_NAME = 'Conversations'
@@ -40,7 +42,7 @@ ELSE
     PRINT 'KIRA.Conversations ya existia.';
 """)
 
-cursor.execute("""
+    cursor.execute("""
 IF NOT EXISTS (
     SELECT 1 FROM INFORMATION_SCHEMA.TABLES
     WHERE TABLE_SCHEMA = 'KIRA' AND TABLE_NAME = 'Messages'
@@ -64,18 +66,26 @@ ELSE
     PRINT 'KIRA.Messages ya existia.';
 """)
 
-conn.commit()
+    conn.commit()
 
-# Verificar
-for schema, table in [("KIRA", "Conversations"), ("KIRA", "Messages")]:
-    cursor.execute("""
-        SELECT COLUMN_NAME, DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS
-        WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? ORDER BY ORDINAL_POSITION
-    """, (schema, table))
-    cols = cursor.fetchall()
-    print(f"\n{schema}.{table} ({len(cols)} columnas):")
-    for c in cols:
-        print(f"  {c.COLUMN_NAME}: {c.DATA_TYPE}")
+    # Verificar que las tablas fueron creadas exitosamente
+    for schema, table in [("KIRA", "Conversations"), ("KIRA", "Messages")]:
+        cursor.execute("""
+            SELECT COLUMN_NAME, DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? ORDER BY ORDINAL_POSITION
+        """, (schema, table))
+        cols = cursor.fetchall()
+        if not cols:
+            raise Exception(f"Tabla {schema}.{table} no existe después de commit.")
+        print(f"\n{schema}.{table} ({len(cols)} columnas):")
+        for c in cols:
+            print(f"  {c.COLUMN_NAME}: {c.DATA_TYPE}")
 
-conn.close()
+except Exception as e:
+    print(f"ERROR: {e}")
+    raise
+finally:
+    if conn:
+        conn.close()
+
 print("\nListo.")
