@@ -14,6 +14,44 @@ const getFullUrl = (url) => {
   return `${API_BASE_URL}${url}`;
 };
 
+function mapConvFromApi(conv) {
+  return {
+    id:        conv.id,
+    title:     conv.title,
+    pinned:    conv.is_pinned,
+    createdAt: conv.created_at,
+    messages:  (conv.messages || []).map(m => ({
+      role:    m.role,
+      content: m.content,
+      attachment: m.attachment_url
+        ? { name: m.attachment_name, type: m.attachment_type, url: m.attachment_url }
+        : undefined,
+    })),
+  };
+}
+
+async function migrateLocalChatsToApi(oldChats, username) {
+  const migrated = [];
+  for (const chat of oldChats) {
+    try {
+      const conv = await apiClient.post('/api/conversations', { title: chat.title || 'Conversación' });
+      for (const msg of (chat.messages || [])) {
+        await apiClient.post(`/api/conversations/${conv.id}/messages`, {
+          role:            msg.role,
+          content:         msg.content,
+          attachment_name: msg.attachment?.name  || null,
+          attachment_type: msg.attachment?.type  || null,
+          attachment_url:  msg.attachment?.url   || null,
+        });
+      }
+      migrated.push({ ...mapConvFromApi(conv), messages: chat.messages || [], pinned: chat.pinned || false });
+    } catch (_) {
+      // si falla una, continuar con las demás
+    }
+  }
+  return migrated;
+}
+
 function App() {
   const { toastSuccess, toastError, toastInfo } = useToast();
 
@@ -40,23 +78,60 @@ function App() {
   const [activeView, setActiveView]     = useState('chat');
   const [sidebarTab, setSidebarTab]     = useState('chats');
 
+  const [isLoadingChats, setIsLoadingChats] = useState(false);
+
   const username = user?.username || 'guest';
 
-  // Cargar datos de localStorage al cambiar usuario
   useEffect(() => {
-    if (user) {
-      const savedChats = localStorage.getItem(`chats_${username}`);
-      setChats(savedChats ? JSON.parse(savedChats) : []);
-      const savedActive = localStorage.getItem(`activeChatId_${username}`);
-      setActiveChatId(savedActive || null);
+    if (!user) {
+      setChats([]); setActiveChatId(null);
       const savedNotes = localStorage.getItem(`notes_${username}`);
       setNotes(savedNotes ? JSON.parse(savedNotes) : []);
-    } else {
-      setChats([]); setActiveChatId(null); setNotes([]);
+      return;
     }
-  }, [user, username]);
+    setIsLoadingChats(true);
+    apiClient.get('/api/conversations')
+      .then(data => {
+        const mapped = data.map(mapConvFromApi);
 
-  useEffect(() => { if (user) localStorage.setItem(`chats_${username}`, JSON.stringify(chats)); }, [chats, username, user]);
+        // Migración one-time: si no hay convs en API pero sí en localStorage, migrar
+        const migKey = `siatc_migrated_v1_${username}`;
+        if (mapped.length === 0 && !localStorage.getItem(migKey)) {
+          const saved = localStorage.getItem(`chats_${username}`);
+          const oldChats = saved ? JSON.parse(saved) : [];
+          if (oldChats.length > 0) {
+            migrateLocalChatsToApi(oldChats, username).then(migratedChats => {
+              setChats(migratedChats);
+              localStorage.setItem(migKey, 'true');
+              const savedActive = localStorage.getItem(`activeChatId_${username}`);
+              if (savedActive && migratedChats.find(c => c.id === savedActive)) {
+                setActiveChatId(savedActive);
+              } else if (migratedChats.length > 0) {
+                setActiveChatId(migratedChats[0].id);
+              }
+            });
+            return;
+          }
+          localStorage.setItem(migKey, 'true');
+        }
+
+        setChats(mapped);
+        const savedActive = localStorage.getItem(`activeChatId_${username}`);
+        if (savedActive && mapped.find(c => c.id === savedActive)) {
+          setActiveChatId(savedActive);
+        } else if (mapped.length > 0) {
+          setActiveChatId(mapped[0].id);
+        } else {
+          setActiveChatId(null);
+        }
+
+        const savedNotes = localStorage.getItem(`notes_${username}`);
+        setNotes(savedNotes ? JSON.parse(savedNotes) : []);
+      })
+      .catch(err => toastError("Error cargando conversaciones", err.message))
+      .finally(() => setIsLoadingChats(false));
+  }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (user) {
       activeChatId
