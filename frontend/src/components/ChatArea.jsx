@@ -91,6 +91,18 @@ function ChatArea({
     setShowScrollBtn(el.scrollHeight - el.scrollTop - el.clientHeight > 150);
   };
 
+  const handleCopyCode = (e) => {
+    if (!e.target.classList.contains('code-copy-btn')) return;
+    const code = e.target.closest('.code-block')?.querySelector('code')?.textContent;
+    if (!code) return;
+    navigator.clipboard.writeText(code).then(() => {
+      const btn = e.target;
+      btn.textContent = '¡Copiado!';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = 'Copiar'; btn.classList.remove('copied'); }, 2000);
+    });
+  };
+
   // Agrupación de chats por fecha para la vista de búsqueda
   const groupChatsByDate = (list) => {
     const groups = { 'Hoy': [], 'Ayer': [], 'Esta semana': [], 'Antes': [] };
@@ -484,7 +496,7 @@ function ChatArea({
           </div>
         ) : (
           <div className="chat-screen">
-            <div className="messages-container" ref={scrollContainerRef} onScroll={handleScroll}>
+            <div className="messages-container" ref={scrollContainerRef} onScroll={handleScroll} onClick={handleCopyCode}>
               {renderMessages()}
             </div>
             {showScrollBtn && (
