@@ -102,7 +102,10 @@ function App() {
           if (oldChats.length > 0) {
             return migrateLocalChatsToApi(oldChats, username).then(migratedChats => {
               setChats(migratedChats);
-              localStorage.setItem(migKey, 'true');
+              if (migratedChats.length > 0) {
+                localStorage.setItem(migKey, 'true');
+              }
+              // If nothing migrated (API was down), don't mark complete — retry next login
               const savedNotes = localStorage.getItem(`notes_${username}`);
               setNotes(savedNotes ? JSON.parse(savedNotes) : []);
               const savedActive = localStorage.getItem(`activeChatId_${username}`);
@@ -113,7 +116,6 @@ function App() {
               }
             }).catch(err => toastError("Error en migración", err.message));
           }
-          localStorage.setItem(migKey, 'true');
         }
 
         setChats(mapped);

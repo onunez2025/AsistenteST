@@ -13,7 +13,7 @@ from urllib.parse import urlparse
 import bcrypt
 import jwt
 import pyodbc
-from typing import List, Dict, Any, Optional, AsyncGenerator
+from typing import List, Dict, Any, Optional, AsyncGenerator, Literal
 from datetime import datetime, timezone, timedelta
 from contextlib import asynccontextmanager
 import pandas as pd
@@ -202,7 +202,7 @@ class ConversationPatch(BaseModel):
     is_pinned: Optional[bool] = None
 
 class MessageCreate(BaseModel):
-    role:            str
+    role:            Literal["user", "assistant"]
     content:         str
     attachment_name: Optional[str] = None
     attachment_type: Optional[str] = None
