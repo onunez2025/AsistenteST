@@ -271,52 +271,61 @@ function App() {
     setFileAttachment(null);
 
     // Preparar chat activo
-    let currentChatId = activeChatId;
-    let currentChats  = [...chats];
-    let activeChat    = currentChats.find(c => c.id === currentChatId);
-    let isFirstRealMessage = false;
+    let currentChatId, currentChats, activeChat, isFirstRealMessage;
+    try {
+      currentChatId      = activeChatId;
+      currentChats       = [...chats];
+      activeChat         = currentChats.find(c => c.id === currentChatId);
+      isFirstRealMessage = false;
 
-    if (!activeChat) {
-      const conv = await apiClient.post('/api/conversations', { title: 'Nueva conversación' });
-      currentChatId = conv.id;
-      activeChat = {
-        id: conv.id, title: conv.title,
-        messages: [], createdAt: conv.created_at, pinned: false,
+      if (!activeChat) {
+        const conv = await apiClient.post('/api/conversations', { title: 'Nueva conversación' });
+        currentChatId = conv.id;
+        activeChat = {
+          id: conv.id, title: conv.title,
+          messages: [], createdAt: conv.created_at, pinned: false,
+        };
+        currentChats = [activeChat, ...currentChats];
+        isFirstRealMessage = true;
+      } else if (activeChat.messages.length === 1 && activeChat.title === 'Conversación Nueva' && text) {
+        isFirstRealMessage = true;
+        activeChat.title = 'Generando título...';
+      }
+
+      // Agregar mensaje del usuario
+      const userMsg = {
+        role: 'user', content: text,
+        attachment: attachmentToSend ? { name: attachmentToSend.name, type: attachmentToSend.type, url: attachmentToSend.url } : undefined
       };
-      currentChats = [activeChat, ...currentChats];
-      isFirstRealMessage = true;
-    } else if (activeChat.messages.length === 1 && activeChat.title === 'Conversación Nueva' && text) {
-      isFirstRealMessage = true;
-      activeChat.title = 'Generando título...';
-    }
+      activeChat.messages.push(userMsg);
+      // Persistir mensaje del usuario (fire-and-forget)
+      apiClient.post(`/api/conversations/${currentChatId}/messages`, {
+        role:            'user',
+        content:         text,
+        attachment_name: attachmentToSend?.name  || null,
+        attachment_type: attachmentToSend?.type  || null,
+        attachment_url:  attachmentToSend?.url   || null,
+      }).catch(() => {});
+      setChats([...currentChats]);
+      setActiveChatId(currentChatId);
+      setIsLoading(true);
+      setStreamingContent('');
+      setProgressLabel('Analizando tu consulta...');
+      setActiveView('chat');
 
-    // Agregar mensaje del usuario
-    const userMsg = {
-      role: 'user', content: text,
-      attachment: attachmentToSend ? { name: attachmentToSend.name, type: attachmentToSend.type, url: attachmentToSend.url } : undefined
-    };
-    activeChat.messages.push(userMsg);
-    // Persistir mensaje del usuario (fire-and-forget)
-    apiClient.post(`/api/conversations/${currentChatId}/messages`, {
-      role:            'user',
-      content:         text,
-      attachment_name: attachmentToSend?.name  || null,
-      attachment_type: attachmentToSend?.type  || null,
-      attachment_url:  attachmentToSend?.url   || null,
-    }).catch(() => {});
-    setChats([...currentChats]);
-    setActiveChatId(currentChatId);
-    setIsLoading(true);
-    setStreamingContent('');
-    setProgressLabel('Analizando tu consulta...');
-    setActiveView('chat');
-
-    // Generar título en paralelo (no bloquea el chat)
-    if (isFirstRealMessage && text) {
-      generateChatTitle(text).then(title => {
-        setChats(prev => prev.map(c => c.id === currentChatId ? { ...c, title } : c));
-        apiClient.patch(`/api/conversations/${currentChatId}`, { title }).catch(() => {});
-      });
+      // Generar título en paralelo (no bloquea el chat)
+      if (isFirstRealMessage && text) {
+        generateChatTitle(text).then(title => {
+          setChats(prev => prev.map(c => c.id === currentChatId ? { ...c, title } : c));
+          apiClient.patch(`/api/conversations/${currentChatId}`, { title }).catch(() => {});
+        });
+      }
+    } catch (setupErr) {
+      toastError("Error iniciando conversación", setupErr.message);
+      setIsLoading(false);
+      setStreamingContent('');
+      setProgressLabel('');
+      return;
     }
 
     // Crear AbortController para poder cancelar
