@@ -161,7 +161,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],
 )
 
@@ -189,6 +189,24 @@ class ChatRequest(BaseModel):
 
 class TitleRequest(BaseModel):
     first_message: str
+
+# ---------------------------------------------------------------------------
+# MODELOS — KIRA Chat Persistence
+# ---------------------------------------------------------------------------
+
+class ConversationCreate(BaseModel):
+    title: str = "Nueva conversación"
+
+class ConversationPatch(BaseModel):
+    title:     Optional[str]  = None
+    is_pinned: Optional[bool] = None
+
+class MessageCreate(BaseModel):
+    role:            str
+    content:         str
+    attachment_name: Optional[str] = None
+    attachment_type: Optional[str] = None
+    attachment_url:  Optional[str] = None
 
 # ---------------------------------------------------------------------------
 # AUTH DEPENDENCY
@@ -1120,6 +1138,165 @@ async def upload_file_endpoint(file: UploadFile = File(...), _: dict = Depends(r
     except Exception as e:
         logger.error(f"Upload error: {e}")
         raise HTTPException(status_code=500, detail="Error al subir archivo. Contacta al administrador.")
+
+
+# ---------------------------------------------------------------------------
+# KIRA — Conversaciones
+# ---------------------------------------------------------------------------
+
+@app.post("/api/conversations", status_code=201)
+async def create_conversation(body: ConversationCreate, user: dict = Depends(require_auth)):
+    user_id = user["id"]
+    conv_id = str(uuid.uuid4())
+    now     = datetime.now(timezone.utc).isoformat()
+    try:
+        conn   = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO KIRA.Conversations (Id, UserId, Title) VALUES (?, ?, ?)",
+            (conv_id, user_id, body.title[:500])
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logger.error(f"create_conversation: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Error creando conversación.")
+    return {"id": conv_id, "title": body.title, "is_pinned": False,
+            "created_at": now, "updated_at": now, "messages": []}
+
+
+@app.get("/api/conversations")
+async def list_conversations(user: dict = Depends(require_auth)):
+    user_id = user["id"]
+    try:
+        conn   = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT Id, Title, IsPinned, CreatedAt, UpdatedAt
+            FROM KIRA.Conversations
+            WHERE UserId = ?
+            ORDER BY UpdatedAt DESC
+        """, (user_id,))
+        convs = cursor.fetchall()
+
+        result = []
+        for c in convs:
+            conv_id = str(c.Id)
+            cursor.execute("""
+                SELECT Id, Role, Content, AttachmentName, AttachmentType, AttachmentUrl, CreatedAt
+                FROM KIRA.Messages
+                WHERE ConversationId = ?
+                ORDER BY CreatedAt ASC
+            """, (conv_id,))
+            msgs = cursor.fetchall()
+            result.append({
+                "id":         conv_id,
+                "title":      c.Title,
+                "is_pinned":  bool(c.IsPinned),
+                "created_at": c.CreatedAt.isoformat() if c.CreatedAt else None,
+                "updated_at": c.UpdatedAt.isoformat() if c.UpdatedAt else None,
+                "messages": [{
+                    "id":              str(m.Id),
+                    "role":            m.Role,
+                    "content":         m.Content,
+                    "attachment_name": m.AttachmentName,
+                    "attachment_type": m.AttachmentType,
+                    "attachment_url":  m.AttachmentUrl,
+                    "created_at":      m.CreatedAt.isoformat() if m.CreatedAt else None,
+                } for m in msgs]
+            })
+        conn.close()
+        return result
+    except Exception as e:
+        logger.error(f"list_conversations: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Error cargando conversaciones.")
+
+
+@app.patch("/api/conversations/{conv_id}", status_code=204)
+async def patch_conversation(conv_id: str, body: ConversationPatch, user: dict = Depends(require_auth)):
+    if body.title is None and body.is_pinned is None:
+        return
+    try:
+        conn   = get_db_connection()
+        cursor = conn.cursor()
+        # Verificar pertenencia
+        cursor.execute("SELECT 1 FROM KIRA.Conversations WHERE Id = ? AND UserId = ?", (conv_id, user["id"]))
+        if not cursor.fetchone():
+            conn.close()
+            raise HTTPException(status_code=404, detail="Conversación no encontrada.")
+        if body.title is not None and body.is_pinned is not None:
+            cursor.execute(
+                "UPDATE KIRA.Conversations SET Title = ?, IsPinned = ?, UpdatedAt = GETUTCDATE() WHERE Id = ?",
+                (body.title[:500], int(body.is_pinned), conv_id)
+            )
+        elif body.title is not None:
+            cursor.execute(
+                "UPDATE KIRA.Conversations SET Title = ?, UpdatedAt = GETUTCDATE() WHERE Id = ?",
+                (body.title[:500], conv_id)
+            )
+        else:
+            cursor.execute(
+                "UPDATE KIRA.Conversations SET IsPinned = ?, UpdatedAt = GETUTCDATE() WHERE Id = ?",
+                (int(body.is_pinned), conv_id)
+            )
+        conn.commit()
+        conn.close()
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"patch_conversation: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Error actualizando conversación.")
+
+
+@app.delete("/api/conversations/{conv_id}", status_code=204)
+async def delete_conversation(conv_id: str, user: dict = Depends(require_auth)):
+    try:
+        conn   = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT 1 FROM KIRA.Conversations WHERE Id = ? AND UserId = ?", (conv_id, user["id"]))
+        if not cursor.fetchone():
+            conn.close()
+            raise HTTPException(status_code=404, detail="Conversación no encontrada.")
+        cursor.execute("DELETE FROM KIRA.Conversations WHERE Id = ?", (conv_id,))
+        conn.commit()
+        conn.close()
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"delete_conversation: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Error eliminando conversación.")
+
+
+@app.post("/api/conversations/{conv_id}/messages", status_code=201)
+async def add_message(conv_id: str, body: MessageCreate, user: dict = Depends(require_auth)):
+    msg_id = str(uuid.uuid4())
+    now    = datetime.now(timezone.utc).isoformat()
+    try:
+        conn   = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT 1 FROM KIRA.Conversations WHERE Id = ? AND UserId = ?", (conv_id, user["id"]))
+        if not cursor.fetchone():
+            conn.close()
+            raise HTTPException(status_code=404, detail="Conversación no encontrada.")
+        cursor.execute("""
+            INSERT INTO KIRA.Messages
+                (Id, ConversationId, Role, Content, AttachmentName, AttachmentType, AttachmentUrl)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (msg_id, conv_id, body.role, body.content,
+              body.attachment_name, body.attachment_type, body.attachment_url))
+        cursor.execute(
+            "UPDATE KIRA.Conversations SET UpdatedAt = GETUTCDATE() WHERE Id = ?", (conv_id,)
+        )
+        conn.commit()
+        conn.close()
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"add_message: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Error guardando mensaje.")
+    return {"id": msg_id, "role": body.role, "content": body.content,
+            "attachment_name": body.attachment_name, "attachment_type": body.attachment_type,
+            "attachment_url": body.attachment_url, "created_at": now}
 
 
 if __name__ == "__main__":
