@@ -194,22 +194,8 @@ def generar_reporte_excel(sql_query: str, nombre_reporte: str) -> str:
             # Fijar primera fila
             ws.freeze_panes = "A2"
         
-        # Subir a Azure Blob Storage
-        blob_name = f"generated/reports/{filename}"
-        azure_url, upload_error = upload_file_to_azure_blob(filepath, blob_name, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-        
-        if azure_url:
-            # Eliminar archivo local
-            try:
-                os.remove(filepath)
-            except Exception as ex:
-                logger.error(f"No se pudo eliminar el archivo temporal local: {ex}")
-            url = azure_url
-            return f"Reporte Excel generado con éxito. Descárgalo aquí: [Descargar Reporte Excel]({url})"
-        else:
-            # Fallback a URL local si falla Azure
-            url = f"/api/download/reports/{filename}"
-            return f"Reporte Excel generado con éxito localmente. Nota: La subida a Azure falló ({upload_error}). Descárgalo aquí: [Descargar Reporte Excel]({url})"
+        url = f"/static/reports/{filename}"
+        return f"Reporte Excel generado con éxito. Descárgalo aquí: [Descargar Reporte Excel]({url})"
 
         
     except Exception as e:
@@ -278,23 +264,9 @@ def generar_grafico(sql_query: str, tipo_grafico: str, columna_x: str, columna_y
         filepath = os.path.join(CHARTS_DIR, filename)
         
         fig.write_html(filepath, include_plotlyjs="cdn", full_html=True)
-        
-        # Subir a Azure Blob Storage
-        blob_name = f"generated/charts/{filename}"
-        azure_url, upload_error = upload_file_to_azure_blob(filepath, blob_name, "text/html")
-        
-        if azure_url:
-            # Eliminar archivo local
-            try:
-                os.remove(filepath)
-            except Exception as ex:
-                logger.error(f"No se pudo eliminar el archivo temporal local: {ex}")
-            url = azure_url
-            return f"Gráfico interactivo generado con éxito. [EmbedChart:{url}]"
-        else:
-            # Fallback a URL local si falla Azure
-            url = f"/api/download/charts/{filename}"
-            return f"Gráfico interactivo generado con éxito localmente. Nota: La subida a Azure falló ({upload_error}). [EmbedChart:{url}]"
+
+        url = f"/static/charts/{filename}"
+        return f"Gráfico interactivo generado con éxito. [EmbedChart:{url}]"
 
         
     except Exception as e:
