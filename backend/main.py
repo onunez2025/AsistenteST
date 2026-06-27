@@ -1151,17 +1151,19 @@ async def create_conversation(body: ConversationCreate, user: dict = Depends(req
     now     = datetime.now(timezone.utc).isoformat()
     try:
         conn   = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            "INSERT INTO KIRA.Conversations (Id, UserId, Title) VALUES (?, ?, ?)",
-            (conv_id, user_id, body.title[:500])
-        )
-        conn.commit()
-        conn.close()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT INTO KIRA.Conversations (Id, UserId, Title) VALUES (?, ?, ?)",
+                (conv_id, user_id, body.title[:500])
+            )
+            conn.commit()
+        finally:
+            conn.close()
     except Exception as e:
         logger.error(f"create_conversation: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Error creando conversación.")
-    return {"id": conv_id, "title": body.title, "is_pinned": False,
+    return {"id": conv_id, "title": body.title[:500], "is_pinned": False,
             "created_at": now, "updated_at": now, "messages": []}
 
 
@@ -1170,42 +1172,45 @@ async def list_conversations(user: dict = Depends(require_auth)):
     user_id = user["id"]
     try:
         conn   = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT Id, Title, IsPinned, CreatedAt, UpdatedAt
-            FROM KIRA.Conversations
-            WHERE UserId = ?
-            ORDER BY UpdatedAt DESC
-        """, (user_id,))
-        convs = cursor.fetchall()
-
-        result = []
-        for c in convs:
-            conv_id = str(c.Id)
+        try:
+            cursor = conn.cursor()
             cursor.execute("""
-                SELECT Id, Role, Content, AttachmentName, AttachmentType, AttachmentUrl, CreatedAt
-                FROM KIRA.Messages
-                WHERE ConversationId = ?
-                ORDER BY CreatedAt ASC
-            """, (conv_id,))
-            msgs = cursor.fetchall()
-            result.append({
-                "id":         conv_id,
-                "title":      c.Title,
-                "is_pinned":  bool(c.IsPinned),
-                "created_at": c.CreatedAt.isoformat() if c.CreatedAt else None,
-                "updated_at": c.UpdatedAt.isoformat() if c.UpdatedAt else None,
-                "messages": [{
-                    "id":              str(m.Id),
-                    "role":            m.Role,
-                    "content":         m.Content,
-                    "attachment_name": m.AttachmentName,
-                    "attachment_type": m.AttachmentType,
-                    "attachment_url":  m.AttachmentUrl,
-                    "created_at":      m.CreatedAt.isoformat() if m.CreatedAt else None,
-                } for m in msgs]
-            })
-        conn.close()
+                SELECT Id, Title, IsPinned, CreatedAt, UpdatedAt
+                FROM KIRA.Conversations
+                WHERE UserId = ?
+                ORDER BY UpdatedAt DESC
+            """, (user_id,))
+            convs = cursor.fetchall()
+
+            result = []
+            cursor2 = conn.cursor()
+            for c in convs:
+                conv_id = str(c.Id)
+                cursor2.execute("""
+                    SELECT Id, Role, Content, AttachmentName, AttachmentType, AttachmentUrl, CreatedAt
+                    FROM KIRA.Messages
+                    WHERE ConversationId = ?
+                    ORDER BY CreatedAt ASC
+                """, (conv_id,))
+                msgs = cursor2.fetchall()
+                result.append({
+                    "id":         conv_id,
+                    "title":      c.Title,
+                    "is_pinned":  bool(c.IsPinned),
+                    "created_at": c.CreatedAt.isoformat() if c.CreatedAt else None,
+                    "updated_at": c.UpdatedAt.isoformat() if c.UpdatedAt else None,
+                    "messages": [{
+                        "id":              str(m.Id),
+                        "role":            m.Role,
+                        "content":         m.Content,
+                        "attachment_name": m.AttachmentName,
+                        "attachment_type": m.AttachmentType,
+                        "attachment_url":  m.AttachmentUrl,
+                        "created_at":      m.CreatedAt.isoformat() if m.CreatedAt else None,
+                    } for m in msgs]
+                })
+        finally:
+            conn.close()
         return result
     except Exception as e:
         logger.error(f"list_conversations: {e}", exc_info=True)
@@ -1218,29 +1223,28 @@ async def patch_conversation(conv_id: str, body: ConversationPatch, user: dict =
         return
     try:
         conn   = get_db_connection()
-        cursor = conn.cursor()
-        # Verificar pertenencia
-        cursor.execute("SELECT 1 FROM KIRA.Conversations WHERE Id = ? AND UserId = ?", (conv_id, user["id"]))
-        if not cursor.fetchone():
+        try:
+            cursor = conn.cursor()
+            if body.title is not None and body.is_pinned is not None:
+                cursor.execute(
+                    "UPDATE KIRA.Conversations SET Title = ?, IsPinned = ?, UpdatedAt = GETUTCDATE() WHERE Id = ? AND UserId = ?",
+                    (body.title[:500], int(body.is_pinned), conv_id, user["id"])
+                )
+            elif body.title is not None:
+                cursor.execute(
+                    "UPDATE KIRA.Conversations SET Title = ?, UpdatedAt = GETUTCDATE() WHERE Id = ? AND UserId = ?",
+                    (body.title[:500], conv_id, user["id"])
+                )
+            else:
+                cursor.execute(
+                    "UPDATE KIRA.Conversations SET IsPinned = ?, UpdatedAt = GETUTCDATE() WHERE Id = ? AND UserId = ?",
+                    (int(body.is_pinned), conv_id, user["id"])
+                )
+            if cursor.rowcount == 0:
+                raise HTTPException(status_code=404, detail="Conversación no encontrada.")
+            conn.commit()
+        finally:
             conn.close()
-            raise HTTPException(status_code=404, detail="Conversación no encontrada.")
-        if body.title is not None and body.is_pinned is not None:
-            cursor.execute(
-                "UPDATE KIRA.Conversations SET Title = ?, IsPinned = ?, UpdatedAt = GETUTCDATE() WHERE Id = ?",
-                (body.title[:500], int(body.is_pinned), conv_id)
-            )
-        elif body.title is not None:
-            cursor.execute(
-                "UPDATE KIRA.Conversations SET Title = ?, UpdatedAt = GETUTCDATE() WHERE Id = ?",
-                (body.title[:500], conv_id)
-            )
-        else:
-            cursor.execute(
-                "UPDATE KIRA.Conversations SET IsPinned = ?, UpdatedAt = GETUTCDATE() WHERE Id = ?",
-                (int(body.is_pinned), conv_id)
-            )
-        conn.commit()
-        conn.close()
     except HTTPException:
         raise
     except Exception as e:
@@ -1252,14 +1256,17 @@ async def patch_conversation(conv_id: str, body: ConversationPatch, user: dict =
 async def delete_conversation(conv_id: str, user: dict = Depends(require_auth)):
     try:
         conn   = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT 1 FROM KIRA.Conversations WHERE Id = ? AND UserId = ?", (conv_id, user["id"]))
-        if not cursor.fetchone():
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "DELETE FROM KIRA.Conversations WHERE Id = ? AND UserId = ?",
+                (conv_id, user["id"])
+            )
+            if cursor.rowcount == 0:
+                raise HTTPException(status_code=404, detail="Conversación no encontrada.")
+            conn.commit()
+        finally:
             conn.close()
-            raise HTTPException(status_code=404, detail="Conversación no encontrada.")
-        cursor.execute("DELETE FROM KIRA.Conversations WHERE Id = ?", (conv_id,))
-        conn.commit()
-        conn.close()
     except HTTPException:
         raise
     except Exception as e:
@@ -1273,22 +1280,23 @@ async def add_message(conv_id: str, body: MessageCreate, user: dict = Depends(re
     now    = datetime.now(timezone.utc).isoformat()
     try:
         conn   = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT 1 FROM KIRA.Conversations WHERE Id = ? AND UserId = ?", (conv_id, user["id"]))
-        if not cursor.fetchone():
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT 1 FROM KIRA.Conversations WHERE Id = ? AND UserId = ?", (conv_id, user["id"]))
+            if not cursor.fetchone():
+                raise HTTPException(status_code=404, detail="Conversación no encontrada.")
+            cursor.execute("""
+                INSERT INTO KIRA.Messages
+                    (Id, ConversationId, Role, Content, AttachmentName, AttachmentType, AttachmentUrl)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (msg_id, conv_id, body.role, body.content,
+                  body.attachment_name, body.attachment_type, body.attachment_url))
+            cursor.execute(
+                "UPDATE KIRA.Conversations SET UpdatedAt = GETUTCDATE() WHERE Id = ?", (conv_id,)
+            )
+            conn.commit()
+        finally:
             conn.close()
-            raise HTTPException(status_code=404, detail="Conversación no encontrada.")
-        cursor.execute("""
-            INSERT INTO KIRA.Messages
-                (Id, ConversationId, Role, Content, AttachmentName, AttachmentType, AttachmentUrl)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (msg_id, conv_id, body.role, body.content,
-              body.attachment_name, body.attachment_type, body.attachment_url))
-        cursor.execute(
-            "UPDATE KIRA.Conversations SET UpdatedAt = GETUTCDATE() WHERE Id = ?", (conv_id,)
-        )
-        conn.commit()
-        conn.close()
     except HTTPException:
         raise
     except Exception as e:
