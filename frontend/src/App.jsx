@@ -103,13 +103,16 @@ function App() {
             migrateLocalChatsToApi(oldChats, username).then(migratedChats => {
               setChats(migratedChats);
               localStorage.setItem(migKey, 'true');
+              const savedNotes = localStorage.getItem(`notes_${username}`);
+              setNotes(savedNotes ? JSON.parse(savedNotes) : []);
               const savedActive = localStorage.getItem(`activeChatId_${username}`);
               if (savedActive && migratedChats.find(c => c.id === savedActive)) {
                 setActiveChatId(savedActive);
               } else if (migratedChats.length > 0) {
                 setActiveChatId(migratedChats[0].id);
               }
-            });
+            }).catch(err => toastError("Error en migración", err.message))
+              .finally(() => setIsLoadingChats(false));
             return;
           }
           localStorage.setItem(migKey, 'true');
