@@ -14,6 +14,10 @@ marked.use({
       return `<a href="${fullUrl || ''}" target="_blank" rel="noopener noreferrer" class="chat-link"${titleAttr}>${text}</a>`;
     },
     code({ text, lang }) {
+      // El bloque pregunta-usuario siempre debe ser extraído y renderizado aparte
+      // (ver ChatArea.jsx). Si llega hasta acá es que algo no lo capturó — se oculta
+      // en vez de mostrar el JSON crudo resaltado como código.
+      if (lang === 'pregunta-usuario') return '';
       const validLang = lang && hljs.getLanguage(lang) ? lang : '';
       const highlighted = validLang
         ? hljs.highlight(text, { language: validLang }).value
