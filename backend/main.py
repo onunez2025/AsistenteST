@@ -477,8 +477,13 @@ def validar_pregunta_usuario(fn_args: Dict[str, Any]) -> Optional[str]:
     """Valida los argumentos de preguntar_usuario. Devuelve un mensaje de error, o None si son válidos."""
     pregunta = (fn_args.get("pregunta") or "").strip()
     opciones = fn_args.get("opciones") or []
-    if not pregunta or not isinstance(opciones, list) or not (2 <= len(opciones) <= 4):
-        return "Error: 'pregunta' es obligatoria y 'opciones' debe tener entre 2 y 4 elementos."
+    if (
+        not pregunta
+        or not isinstance(opciones, list)
+        or not (2 <= len(opciones) <= 4)
+        or not all(isinstance(o, str) for o in opciones)
+    ):
+        return "Error: 'pregunta' es obligatoria y 'opciones' debe ser una lista de 2 a 4 strings."
     return None
 
 
