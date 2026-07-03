@@ -472,6 +472,50 @@ TOOL_LABELS: Dict[str, str] = {
 def tool_label(name: str) -> str:
     return TOOL_LABELS.get(name, f"Ejecutando herramienta: {name}...")
 
+
+def validar_pregunta_usuario(fn_args: Dict[str, Any]) -> Optional[str]:
+    """Valida los argumentos de preguntar_usuario. Devuelve un mensaje de error, o None si son válidos."""
+    pregunta = (fn_args.get("pregunta") or "").strip()
+    opciones = fn_args.get("opciones") or []
+    if not pregunta or not isinstance(opciones, list) or not (2 <= len(opciones) <= 4):
+        return "Error: 'pregunta' es obligatoria y 'opciones' debe tener entre 2 y 4 elementos."
+    return None
+
+
+PREGUNTAR_USUARIO_TOOL: Dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "preguntar_usuario",
+        "description": (
+            "Pausa para preguntarle al usuario ANTES de ejecutar una operación lenta o costosa "
+            "(análisis masivo, exportación completa de Qualtrics, consulta SQL sin filtros que "
+            "traerá miles de filas). Úsala para confirmar alcance, no para dudas triviales. "
+            "Máximo una vez por turno; nunca repitas una pregunta ya respondida en la misma conversación."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "pregunta": {
+                    "type": "string",
+                    "description": "La pregunta, breve y clara. Incluye números concretos cuando existan (ej. cantidad de filas, tiempo estimado)."
+                },
+                "opciones": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "minItems": 2,
+                    "maxItems": 4,
+                    "description": "2 a 4 opciones concretas de respuesta."
+                },
+                "permite_texto_libre": {
+                    "type": "boolean",
+                    "description": "Si además debe mostrarse un campo para que el usuario escriba su propia respuesta."
+                }
+            },
+            "required": ["pregunta", "opciones"]
+        }
+    }
+}
+
 # ---------------------------------------------------------------------------
 # CONSTRUCCIÓN DEL SYSTEM PROMPT (con esquema dinámico)
 # ---------------------------------------------------------------------------
@@ -843,6 +887,7 @@ async def stream_chat_response(history_messages: List[ChatMessage], latest_messa
 
         mcp_tools    = await get_mcp_tools()
         openai_tools = map_to_openai_tools(mcp_tools)
+        openai_tools.append(PREGUNTAR_USUARIO_TOOL)
         tool_to_srv  = {item["tool"].name: item["mcp_server"] for item in mcp_tools}
 
         max_iters = 12
@@ -919,6 +964,20 @@ async def stream_chat_response(history_messages: List[ChatMessage], latest_messa
             for tc in tool_calls:
                 fn_name = tc.function.name
                 fn_args = json.loads(tc.function.arguments)
+
+                if fn_name == "preguntar_usuario":
+                    error = validar_pregunta_usuario(fn_args)
+                    if error:
+                        messages.append({"role": "tool", "tool_call_id": tc.id, "name": fn_name, "content": error})
+                        continue
+                    yield sse({
+                        "type": "question",
+                        "pregunta": fn_args["pregunta"],
+                        "opciones": fn_args["opciones"],
+                        "permite_texto_libre": bool(fn_args.get("permite_texto_libre", False)),
+                    })
+                    yield emit_usage(acc_cache_hit, acc_cache_miss, acc_completion)
+                    return
 
                 yield sse({"type": "tool_start", "tool": fn_name, "label": tool_label(fn_name)})
                 logger.info(f"[STREAM] Tool call: {fn_name} | args: {str(fn_args)[:120]}")
