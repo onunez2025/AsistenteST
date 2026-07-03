@@ -25,7 +25,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
-from openai import OpenAI
+from openai import AsyncOpenAI
 import fitz  # PyMuPDF
 from azure.storage.blob import BlobServiceClient, ContentSettings
 
@@ -878,7 +878,7 @@ async def stream_chat_response(history_messages: List[ChatMessage], latest_messa
         yield sse({"type": "status", "message": "Analizando tu consulta..."})
 
         prompt_sistema = build_system_prompt(fecha_actual, hora_actual)
-        client         = OpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
+        client         = AsyncOpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
 
         messages = [{"role": "system", "content": prompt_sistema}]
         for msg in history_messages:
@@ -911,7 +911,7 @@ async def stream_chat_response(history_messages: List[ChatMessage], latest_messa
 
             # Para iteraciones con tool calls usamos stream=False para procesar rápido
             # Solo la respuesta final (sin tool calls) se hace con stream=True
-            response = client.chat.completions.create(
+            response = await client.chat.completions.create(
                 model="deepseek-chat",
                 messages=messages,
                 temperature=0.1,
@@ -1048,8 +1048,8 @@ async def generate_title_endpoint(request: TitleRequest, _: dict = Depends(requi
         return {"title": request.first_message[:40]}
 
     try:
-        client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
-        response = client.chat.completions.create(
+        client = AsyncOpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
+        response = await client.chat.completions.create(
             model="deepseek-chat",
             messages=[
                 {"role": "system", "content": "Eres un asistente que genera títulos cortos (máximo 6 palabras, sin puntos finales) para conversaciones de un asistente de gestión de servicios técnicos. Responde SOLO con el título, sin comillas ni explicaciones."},
