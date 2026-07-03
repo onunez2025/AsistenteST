@@ -388,6 +388,30 @@ function App() {
             case 'usage':
               lastUsageRef.current = event;
               break;
+            case 'question': {
+              const questionBlock = '```pregunta-usuario\n' + JSON.stringify({
+                pregunta: event.pregunta,
+                opciones: event.opciones,
+                permite_texto_libre: !!event.permite_texto_libre,
+              }) + '\n```';
+              setChats(prev => {
+                const updated = [...prev];
+                const chat    = updated.find(c => c.id === currentChatId);
+                if (chat) {
+                  chat.messages.push({ role: 'assistant', content: questionBlock });
+                }
+                return updated;
+              });
+              apiClient.post(`/api/conversations/${currentChatId}/messages`, {
+                role: 'assistant', content: questionBlock,
+              }).catch(() => {});
+              lastUsageRef.current = null;
+              setStreamingContent('');
+              setProgressLabel('');
+              setIsLoading(false);
+              abortControllerRef.current = null;
+              break;
+            }
             case 'done': {
               const capturedUsage = lastUsageRef.current;
               setChats(prev => {
