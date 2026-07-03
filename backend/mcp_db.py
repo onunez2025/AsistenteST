@@ -41,6 +41,7 @@ SQL_SERVER = os.getenv("SQL_SERVER")
 SQL_DATABASE = os.getenv("SQL_DATABASE")
 SQL_USER = os.getenv("SQL_USER")
 SQL_PASSWORD = os.getenv("SQL_PASSWORD")
+SQL_ODBC_DRIVER = os.getenv("SQL_ODBC_DRIVER", "ODBC Driver 17 for SQL Server")
 
 # Azure Blob Storage Config
 AZURE_STORAGE_CONNECTION_STRING = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
@@ -86,7 +87,7 @@ mcp = FastMCP("Azure SQL Database Server")
 def get_db_connection():
     """Establishes connection to Azure SQL Database."""
     conn_str = (
-        f"DRIVER={{ODBC Driver 17 for SQL Server}};"
+        f"DRIVER={{{SQL_ODBC_DRIVER}}};"
         f"SERVER={SQL_SERVER};"
         f"DATABASE={SQL_DATABASE};"
         f"UID={SQL_USER};"

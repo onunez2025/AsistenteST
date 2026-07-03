@@ -42,3 +42,9 @@ openssl rand -hex 32
 | QUALTRICS_BASE_URL | URL base de Qualtrics |
 | QUALTRICS_API_TOKEN | Token API de Qualtrics |
 | QUALTRICS_DIR_ID | ID de directorio Qualtrics |
+| FSM_TOKEN_URL | URL de autenticación OAuth2 de FSM (Coresuite) |
+| FSM_QUERY_URL | URL de la Query API de FSM |
+| FSM_CLIENT_ID | Client ID (usuario) de FSM |
+| FSM_CLIENT_SECRET | Client Secret (contraseña) de FSM |
+| FSM_ACCOUNT | Cuenta de FSM (ej. sole.com_T1) |
+| FSM_COMPANY | Compañía de FSM (ej. sole_prd_c4) |

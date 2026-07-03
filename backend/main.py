@@ -54,10 +54,11 @@ SQL_SERVER   = os.getenv("SQL_SERVER")
 SQL_DATABASE = os.getenv("SQL_DATABASE")
 SQL_USER     = os.getenv("SQL_USER")
 SQL_PASSWORD = os.getenv("SQL_PASSWORD")
+SQL_ODBC_DRIVER = os.getenv("SQL_ODBC_DRIVER", "ODBC Driver 17 for SQL Server")
 
 def get_db_connection():
     conn_str = (
-        f"DRIVER={{ODBC Driver 17 for SQL Server}};"
+        f"DRIVER={{{SQL_ODBC_DRIVER}}};"
         f"SERVER={SQL_SERVER};"
         f"DATABASE={SQL_DATABASE};"
         f"UID={SQL_USER};"
@@ -112,6 +113,7 @@ async def lifespan(app: FastAPI):
     db_params        = StdioServerParameters(command=python_cmd, args=[os.path.join(backend_dir, "mcp_db.py")],         env=subproc_env)
     sap_params       = StdioServerParameters(command=python_cmd, args=[os.path.join(backend_dir, "mcp_sap_c4c.py")],    env=subproc_env)
     qualtrics_params = StdioServerParameters(command=python_cmd, args=[os.path.join(backend_dir, "mcp_qualtrics.py")],  env=subproc_env)
+    fsm_params       = StdioServerParameters(command=python_cmd, args=[os.path.join(backend_dir, "mcp_fsm.py")],        env=subproc_env)
 
     try:
         db_ctx = stdio_client(db_params)
@@ -140,6 +142,15 @@ async def lifespan(app: FastAPI):
         mcp_sessions["qualtrics"] = qualtrics_ses
         mcp_contexts.append((qualtrics_ctx, qualtrics_sc))
         logger.info("MCP Qualtrics conectado.")
+
+        fsm_ctx = stdio_client(fsm_params)
+        fsm_rw  = await fsm_ctx.__aenter__()
+        fsm_sc  = ClientSession(fsm_rw[0], fsm_rw[1])
+        fsm_ses = await fsm_sc.__aenter__()
+        await fsm_ses.initialize()
+        mcp_sessions["fsm"] = fsm_ses
+        mcp_contexts.append((fsm_ctx, fsm_sc))
+        logger.info("MCP FSM conectado.")
     except Exception as e:
         logger.error(f"Error arrancando MCP: {e}", exc_info=True)
 
@@ -160,6 +171,7 @@ app = FastAPI(title="SIATC.IA — API", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
+    allow_origin_regex=os.getenv("ALLOWED_ORIGIN_REGEX"),  # solo para desarrollo local
     allow_credentials=True,
     allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],
@@ -345,7 +357,7 @@ def parse_attachment_to_text(attachment: Attachment) -> str:
 
 async def get_mcp_tools() -> List[Dict[str, Any]]:
     tools = []
-    for srv in ("db", "sap", "qualtrics"):
+    for srv in ("db", "sap", "qualtrics", "fsm"):
         if srv in mcp_sessions:
             try:
                 res = await mcp_sessions[srv].list_tools()
@@ -453,6 +465,8 @@ TOOL_LABELS: Dict[str, str] = {
     "calcular_nps_comparativo":                "Generando ranking NPS por CAS en Qualtrics...",
     "calcular_nps_por_tecnico":                "Calculando NPS por técnico en Qualtrics...",
     "calcular_nps_por_supervisor":             "Calculando NPS por supervisor en Qualtrics...",
+    "ejecutar_consulta_fsm":                   "Consultando FSM en tiempo real...",
+    "obtener_actividad_fsm_por_codigo":        "Consultando actividad de FSM...",
 }
 
 def tool_label(name: str) -> str:
@@ -634,6 +648,23 @@ Usa esta fecha para filtros de 'hoy', 'ayer', 'esta semana', 'este mes', 'este a
    - [dbo].[GAC_APP_TB_AUDIT_LOG]: log de auditoría de acciones en el sistema.
    - [dbo].[GAC_APP_TB_LOGIN]: historial de logins.
 
+9. FSM EN TIEMPO REAL (SAP Field Service Management / Coresuite): herramientas MCP 'ejecutar_consulta_fsm'
+   y 'obtener_actividad_fsm_por_codigo'. FSM es el sistema donde los técnicos ejecutan y cierran las
+   actividades de servicio. Sus datos YA están sincronizados parcialmente en [APPGAC].[ServiciosViewSQL]
+   (campos LlamadaFSM, VisitaRealizada, TrabajoRealizado, CheckOut, ComentarioTecnico, etc.) — para
+   análisis históricos, reportes o KPIs SIEMPRE usa esa tabla SQL primero, es mucho más rápida.
+   Usa las herramientas de FSM SOLO cuando necesites el dato EN TIEMPO REAL directo de FSM o un campo
+   que NO existe en ServiciosViewSQL (ej. equipo asignado, técnico responsable actual, historial de
+   cambios de estado, adjuntos de la actividad).
+   ▸ Detalle completo de una actividad por su código visible → obtener_actividad_fsm_por_codigo(codigo)
+   ▸ Consultas más específicas o cruces → ejecutar_consulta_fsm(consulta_coresql, entidades)
+     Sintaxis CoreSQL: SIEMPRE alias ("FROM Activity a"), campos en camelCase minúsculo
+     (a.id, a.code, a.subject, a.status, a.remarks, a.businessPartner, a.equipment, a.responsibles,
+     a.startDateTime, a.endDateTime, a.lastChanged), SIEMPRE LIMIT en listas.
+     Entidades disponibles: Activity, ActivityCode, Address, Attachment, BusinessPartner,
+     ChecklistInstance, Contact, Equipment, Person, PurchaseOrder, ServiceCall, ServiceCallStatus,
+     ServiceCallType, Skill.
+
 ━━━ ESQUEMAS REALES DE COLUMNAS (cargados automáticamente desde INFORMATION_SCHEMA) ━━━
 {DB_SCHEMA_CACHE}
 
@@ -678,6 +709,11 @@ Identifica la fuente ANTES de consultar. Aplica la primera regla que coincida.
    Técnicos, CAS, estados de servicio, eficiencia (TrabajoRealizado), TPV (SolicitaNuevaVisita),
    materiales, fechas de visita, comentarios técnicos, tickets abiertos/cerrados, nuevas visitas.
    ▸ Materiales/repuestos → JOIN ServiciosMateriales ON LlamadaFSM + JOIN ServiciosMaterialesMotivos ON IdMotivo
+
+🔷 USA FSM EN TIEMPO REAL (ejecutar_consulta_fsm / obtener_actividad_fsm_por_codigo) SOLO cuando:
+   "en este momento", "ahora mismo", "estado actual en FSM", "equipo asignado a la actividad",
+   "quién es el responsable actual", "adjuntos de la actividad FSM", o el dato pedido NO existe
+   en ServiciosViewSQL. ⛔ NUNCA uses FSM en vivo para históricos, KPIs o reportes — usa SQL, es más rápido.
 
 ⚪ USA GAC_APP_TB_* para:
    Empleados SOLE (GAC_APP_TB_EMPLEADOS), supervisores (GAC_APP_TB_EMPLEADOS_INFORMACION_ADICIONAL),

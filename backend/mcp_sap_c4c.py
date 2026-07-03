@@ -147,7 +147,7 @@ def consultar_tickets_c4c_por_tienda_y_fecha(tienda_abreviatura: str, fecha_inic
             
             if SQL_SERVER and SQL_DATABASE and SQL_USER and SQL_PASSWORD:
                 conn_str = (
-                    f"DRIVER={{ODBC Driver 17 for SQL Server}};"
+                    f"DRIVER={{{os.getenv('SQL_ODBC_DRIVER', 'ODBC Driver 17 for SQL Server')}}};"
                     f"SERVER={SQL_SERVER};"
                     f"DATABASE={SQL_DATABASE};"
                     f"UID={SQL_USER};"
@@ -375,7 +375,7 @@ def analizar_cambio_tipo_servicio_cas(
 
     try:
         conn_str = (
-            f"DRIVER={{ODBC Driver 17 for SQL Server}};"
+            f"DRIVER={{{os.getenv('SQL_ODBC_DRIVER', 'ODBC Driver 17 for SQL Server')}}};"
             f"SERVER={SQL_SERVER_};DATABASE={SQL_DATABASE_};"
             f"UID={SQL_USER_};PWD={SQL_PASSWORD_};"
             f"Encrypt=yes;TrustServerCertificate=no;"

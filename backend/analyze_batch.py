@@ -65,8 +65,9 @@ def clear_cancel_flag(job_id: str):
 # ── base de datos ─────────────────────────────────────────────────────────────
 
 def get_db_connection():
+    driver = os.getenv("SQL_ODBC_DRIVER", "ODBC Driver 17 for SQL Server")
     conn_str = (
-        f"DRIVER={{ODBC Driver 17 for SQL Server}};"
+        f"DRIVER={{{driver}}};"
         f"SERVER={os.getenv('SQL_SERVER')};"
         f"DATABASE={os.getenv('SQL_DATABASE')};"
         f"UID={os.getenv('SQL_USER')};"

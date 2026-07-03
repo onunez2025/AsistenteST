@@ -32,8 +32,9 @@ ORDER BY TABLE_SCHEMA, TABLE_NAME, ORDINAL_POSITION
 """
 
 def _get_connection():
+    driver = os.getenv("SQL_ODBC_DRIVER", "ODBC Driver 17 for SQL Server")
     conn_str = (
-        f"DRIVER={{ODBC Driver 17 for SQL Server}};"
+        f"DRIVER={{{driver}}};"
         f"SERVER={os.getenv('SQL_SERVER')};"
         f"DATABASE={os.getenv('SQL_DATABASE')};"
         f"UID={os.getenv('SQL_USER')};"
