@@ -133,8 +133,69 @@ function ChatArea({
   };
   const firstName = user?.full_name?.split(' ')[0] || user?.username || '';
 
+  // Estado local para el campo de texto libre de una pregunta activa
+  const [freeTextAnswer, setFreeTextAnswer] = useState('');
+
+  const renderQuestionCard = (q, isLastAiMessage) => {
+    const interactive = isLastAiMessage && !isLoading;
+    return (
+      <div className="message-body">
+        <div className="question-card">
+          <div className="question-text">{q.pregunta}</div>
+          <div className="question-options">
+            {q.opciones.map((opcion, i) => (
+              <button
+                key={i}
+                className="question-option-btn"
+                disabled={!interactive}
+                onClick={() => interactive && handleSendMessage(opcion)}
+              >
+                {opcion}
+              </button>
+            ))}
+          </div>
+          {q.permite_texto_libre && interactive && (
+            <div className="question-free-text">
+              <input
+                type="text"
+                placeholder="Escribe tu propia respuesta..."
+                value={freeTextAnswer}
+                onChange={(e) => setFreeTextAnswer(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && freeTextAnswer.trim()) {
+                    handleSendMessage(freeTextAnswer.trim());
+                    setFreeTextAnswer('');
+                  }
+                }}
+              />
+              <button
+                className="question-option-btn"
+                disabled={!freeTextAnswer.trim()}
+                onClick={() => {
+                  handleSendMessage(freeTextAnswer.trim());
+                  setFreeTextAnswer('');
+                }}
+              >
+                Enviar
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   // Renderizado de mensajes con gráficos y Excel
-  const renderMessageContent = (content, index) => {
+  const renderMessageContent = (content, index, isLastAiMessage = false) => {
+    const questionMatch = /```pregunta-usuario\n([\s\S]*?)\n```/.exec(content);
+    if (questionMatch) {
+      let q = null;
+      try { q = JSON.parse(questionMatch[1]); } catch { q = null; }
+      if (q && q.pregunta && Array.isArray(q.opciones)) {
+        return renderQuestionCard(q, isLastAiMessage);
+      }
+    }
+
     const chartMatch = /\[EmbedChart:([^\]]+)\]/i.exec(content)
       || /\[[^\]]+\]\((https:\/\/[^)]+\.html)\)/i.exec(content);
     const excelMatch = /\[Descargar Reporte Excel\]\(([^)]+)\)/i.exec(content)
@@ -329,7 +390,7 @@ function ChatArea({
                   <div className="message-ai-body">
                     <div className="message-ai-name">SIATC.IA</div>
                     <div className="message-ai-text">
-                      {renderMessageContent(msg.content, index)}
+                      {renderMessageContent(msg.content, index, index === lastAiIndex)}
                     </div>
                     <MessageActions
                       messageContent={msg.content || ''}
