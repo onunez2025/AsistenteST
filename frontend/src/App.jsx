@@ -144,12 +144,12 @@ function App() {
   }, [activeChatId, username, user]);
   useEffect(() => { if (user) localStorage.setItem(`notes_${username}`, JSON.stringify(notes)); }, [notes, username, user]);
 
-  // Estado de chat
+  // Estado de chat — por conversación, para poder generar en varias a la vez
   const [inputText, setInputText]           = useState('');
   const [searchQuery, setSearchQuery]       = useState('');
-  const [isLoading, setIsLoading]           = useState(false);
-  const [streamingContent, setStreamingContent] = useState(''); // texto que va llegando en tiempo real
-  const [progressLabel, setProgressLabel]   = useState('');     // "Consultando base de datos..."
+  const [loadingChatIds, setLoadingChatIds] = useState(() => new Set());
+  const [streamingContentByChatId, setStreamingContentByChatId] = useState({}); // chatId -> texto que va llegando
+  const [progressLabelByChatId, setProgressLabelByChatId]       = useState({}); // chatId -> "Consultando base de datos..."
   const [isSidebarOpen, setIsSidebarOpen]   = useState(() => {
     const saved = localStorage.getItem('siatc_sidebar_open');
     return saved !== null ? saved === 'true' : true;
@@ -160,9 +160,35 @@ function App() {
   const fileInputRef  = useRef(null);
   const messagesEndRef = useRef(null);
 
-  // AbortController para cancelar el stream
-  const abortControllerRef = useRef(null);
-  const lastUsageRef        = useRef(null);
+  // AbortController y último usage, por conversación (permite cancelar/rastrear cada stream por separado)
+  const abortControllersRef  = useRef({}); // chatId -> AbortController
+  const lastUsageByChatIdRef = useRef({}); // chatId -> evento usage
+
+  const setChatLoading = (chatId, value) => {
+    setLoadingChatIds(prev => {
+      const next = new Set(prev);
+      if (value) next.add(chatId); else next.delete(chatId);
+      return next;
+    });
+  };
+  const setChatStreamingContent = (chatId, value) => {
+    setStreamingContentByChatId(prev => ({ ...prev, [chatId]: value }));
+  };
+  const setChatProgressLabel = (chatId, value) => {
+    setProgressLabelByChatId(prev => ({ ...prev, [chatId]: value }));
+  };
+  const clearChatStreamState = (chatId) => {
+    setChatLoading(chatId, false);
+    setChatStreamingContent(chatId, '');
+    setChatProgressLabel(chatId, '');
+    delete abortControllersRef.current[chatId];
+    delete lastUsageByChatIdRef.current[chatId];
+  };
+
+  // Derivados para la conversación activa — el resto del componente los usa igual que antes
+  const isLoading        = activeChatId ? loadingChatIds.has(activeChatId) : false;
+  const streamingContent = activeChatId ? (streamingContentByChatId[activeChatId] || '') : '';
+  const progressLabel    = activeChatId ? (progressLabelByChatId[activeChatId] || '') : '';
 
   useEffect(() => { localStorage.setItem('siatc_sidebar_open', isSidebarOpen); }, [isSidebarOpen]);
 
@@ -211,6 +237,8 @@ function App() {
       toastError("Error eliminando conversación", err.message);
       return;
     }
+    abortControllersRef.current[id]?.abort();
+    delete abortControllersRef.current[id];
     const filtered = chats.filter(c => c.id !== id);
     setChats(filtered);
     if (activeChatId === id) setActiveChatId(filtered.length > 0 ? filtered[0].id : null);
@@ -244,11 +272,12 @@ function App() {
     }
   };
 
-  // Detener generación
+  // Detener generación de la conversación activa
   const handleStopGeneration = () => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
+    const controller = activeChatId ? abortControllersRef.current[activeChatId] : null;
+    if (controller) {
+      controller.abort();
+      delete abortControllersRef.current[activeChatId];
     }
   };
 
@@ -310,9 +339,9 @@ function App() {
       }).catch(() => {});
       setChats([...currentChats]);
       setActiveChatId(currentChatId);
-      setIsLoading(true);
-      setStreamingContent('');
-      setProgressLabel('Analizando tu consulta...');
+      setChatLoading(currentChatId, true);
+      setChatStreamingContent(currentChatId, '');
+      setChatProgressLabel(currentChatId, 'Analizando tu consulta...');
       setActiveView('chat');
 
       // Generar título en paralelo (no bloquea el chat)
@@ -324,15 +353,14 @@ function App() {
       }
     } catch (setupErr) {
       toastError("Error iniciando conversación", setupErr.message);
-      setIsLoading(false);
-      setStreamingContent('');
-      setProgressLabel('');
+      if (currentChatId) clearChatStreamState(currentChatId);
       return;
     }
 
-    // Crear AbortController para poder cancelar
+    // Crear AbortController para poder cancelar esta conversación en particular
     const controller = new AbortController();
-    abortControllerRef.current = controller;
+    abortControllersRef.current[currentChatId] = controller;
+    let accumulated = '';
 
     try {
       const response = await apiClient.stream('/api/chat/stream', {
@@ -345,9 +373,7 @@ function App() {
         if (response.status === 401) {
           handleLogout();
           toastError("Sesión expirada", "Por favor inicia sesión nuevamente.");
-          setIsLoading(false);
-          setStreamingContent('');
-          setProgressLabel('');
+          clearChatStreamState(currentChatId);
           return;
         }
         throw new Error(`Error del servidor: ${response.status}`);
@@ -355,7 +381,6 @@ function App() {
 
       const reader  = response.body.getReader();
       const decoder = new TextDecoder();
-      let accumulated = '';
       let buffer = '';
 
       while (true) {
@@ -373,20 +398,20 @@ function App() {
 
           switch (event.type) {
             case 'status':
-              setProgressLabel(event.message || '');
+              setChatProgressLabel(currentChatId, event.message || '');
               break;
             case 'tool_start':
-              setProgressLabel(event.label || `Ejecutando ${event.tool}...`);
+              setChatProgressLabel(currentChatId, event.label || `Ejecutando ${event.tool}...`);
               break;
             case 'tool_end':
-              setProgressLabel('Procesando resultados...');
+              setChatProgressLabel(currentChatId, 'Procesando resultados...');
               break;
             case 'token':
               accumulated += event.content || '';
-              setStreamingContent(accumulated);
+              setChatStreamingContent(currentChatId, accumulated);
               break;
             case 'usage':
-              lastUsageRef.current = event;
+              lastUsageByChatIdRef.current[currentChatId] = event;
               break;
             case 'question': {
               const questionBlock = '```pregunta-usuario\n' + JSON.stringify({
@@ -405,15 +430,11 @@ function App() {
               apiClient.post(`/api/conversations/${currentChatId}/messages`, {
                 role: 'assistant', content: questionBlock,
               }).catch(() => {});
-              lastUsageRef.current = null;
-              setStreamingContent('');
-              setProgressLabel('');
-              setIsLoading(false);
-              abortControllerRef.current = null;
+              clearChatStreamState(currentChatId);
               break;
             }
             case 'done': {
-              const capturedUsage = lastUsageRef.current;
+              const capturedUsage = lastUsageByChatIdRef.current[currentChatId];
               setChats(prev => {
                 const updated = [...prev];
                 const chat    = updated.find(c => c.id === currentChatId);
@@ -430,11 +451,7 @@ function App() {
               apiClient.post(`/api/conversations/${currentChatId}/messages`, {
                 role: 'assistant', content: accumulated,
               }).catch(() => {});
-              lastUsageRef.current = null;
-              setStreamingContent('');
-              setProgressLabel('');
-              setIsLoading(false);
-              abortControllerRef.current = null;
+              clearChatStreamState(currentChatId);
               break;
             }
             case 'error':
@@ -445,7 +462,7 @@ function App() {
     } catch (err) {
       if (err.name === 'AbortError') {
         // El usuario detuvo la generación — guardar lo que se acumuló
-        const partial = streamingContent;
+        const partial = accumulated;
         if (partial) {
           setChats(prev => {
             const updated = [...prev];
@@ -468,11 +485,7 @@ function App() {
           return updated;
         });
       }
-      setStreamingContent('');
-      setProgressLabel('');
-      setIsLoading(false);
-      lastUsageRef.current = null;
-      abortControllerRef.current = null;
+      clearChatStreamState(currentChatId);
     }
   };
 
@@ -535,7 +548,8 @@ function App() {
   const handleSendNoteToChat = (content) => { setInputText(prev => prev + (prev ? '\n' : '') + content); setActiveView('chat'); toastInfo("Cuaderno copiado al chat"); };
 
   const handleLogout = () => {
-    handleStopGeneration();
+    Object.values(abortControllersRef.current).forEach(controller => controller.abort());
+    abortControllersRef.current = {};
     localStorage.removeItem('siatc_token');
     localStorage.removeItem('siatc_user');
     setToken(null); setUser(null); setChats([]); setActiveChatId(null); setNotes([]);
