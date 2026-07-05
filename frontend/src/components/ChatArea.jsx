@@ -558,7 +558,9 @@ function ChatArea({
         ) : (
           <div className="chat-screen">
             <div className="messages-container" ref={scrollContainerRef} onScroll={handleScroll} onClick={handleCopyCode}>
-              {renderMessages()}
+              <div className="messages-inner">
+                {renderMessages()}
+              </div>
             </div>
             {showScrollBtn && (
               <button
