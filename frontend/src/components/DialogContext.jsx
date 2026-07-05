@@ -42,9 +42,8 @@ export function DialogProvider({ children }) {
       {children}
       {dialog.isOpen && (
         <div
-          className="login-overlay"
+          className="dialog-overlay"
           onClick={handleCancel}
-          style={{ position: 'fixed', inset: 0, zIndex: 9999 }}
         >
           <div
             onClick={(e) => e.stopPropagation()}
