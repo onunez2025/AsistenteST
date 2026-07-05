@@ -1,18 +1,9 @@
 import React from 'react';
-import { SiatcLogoFull, SiatcHeroMark } from './icons';
+import { SiatcLogoFull } from './icons';
 
 export default function Landing({ onLoginClick }) {
   return (
     <div className="landing-page">
-      {/* Fondo animado: orbes y partículas CSS */}
-      <div className="landing-bg" aria-hidden="true">
-        <div className="landing-orb landing-orb-1" />
-        <div className="landing-orb landing-orb-2" />
-        <div className="landing-orb landing-orb-3" />
-        <div className="landing-grid" />
-      </div>
-
-      {/* Navbar */}
       <nav className="landing-nav">
         <div className="landing-nav-logo">
           <SiatcLogoFull size={28} />
@@ -22,17 +13,7 @@ export default function Landing({ onLoginClick }) {
         </button>
       </nav>
 
-      {/* Hero */}
       <div className="landing-hero">
-        <div className="landing-hero-icon">
-          <SiatcHeroMark size={96} />
-        </div>
-
-        <div className="landing-badge">
-          <span className="landing-badge-dot" />
-          Sistema Integral de Atención al Cliente IA
-        </div>
-
         <h1 className="landing-hero-title">
           El asistente inteligente<br />
           de <span>Grupo SOLE / Rinnai</span>
@@ -48,13 +29,6 @@ export default function Landing({ onLoginClick }) {
             Comenzar ahora
           </button>
           <span className="landing-cta-hint">Acceso solo para colaboradores SOLE</span>
-        </div>
-
-        <div className="landing-features">
-          <div className="landing-feature-pill"><span>📊</span> NPS en tiempo real</div>
-          <div className="landing-feature-pill"><span>🔧</span> Gestión de servicios</div>
-          <div className="landing-feature-pill"><span>🏢</span> SAP C4C integrado</div>
-          <div className="landing-feature-pill"><span>📈</span> Reportes automáticos</div>
         </div>
       </div>
     </div>
