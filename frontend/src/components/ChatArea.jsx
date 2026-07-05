@@ -429,8 +429,6 @@ function ChatArea({
 
   return (
     <div className="main-content">
-      <div className="glow-blob glow-blob-primary" />
-      <div className="glow-blob glow-blob-accent" />
       {/* Topbar */}
       <div className="topbar">
         {!isSidebarOpen && (
@@ -438,11 +436,6 @@ function ChatArea({
             <Menu size={20} />
           </button>
         )}
-        <span className="topbar-title">
-          {activeMessages && activeMessages.length > 0
-            ? (chats?.find(c => c.id === activeChatId)?.title || 'SIATC.IA')
-            : ''}
-        </span>
         <div className="topbar-actions">
           <button className="topbar-icon-btn" onClick={toggleTheme} title="Cambiar tema">
             {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
