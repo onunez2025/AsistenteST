@@ -548,20 +548,7 @@
 }
 
 .message-ai { align-items: flex-start; }
-.message-ai-inner { display: flex; gap: 12px; width: 100%; }
-.message-ai-avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, var(--color-primary), var(--color-accent));
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  margin-top: 2px;
-}
 .message-ai-body { flex: 1; min-width: 0; }
-.message-ai-name { font-size: 0.8125rem; font-weight: 700; color: var(--color-primary); margin-bottom: 6px; }
 .message-ai-text {
   font-size: 0.9375rem;
   line-height: 1.7;
@@ -1468,22 +1455,6 @@
   z-index: 0;
 }
 .home-screen > * { position: relative; z-index: 1; }
-
-/* ═══════════════════════════════════════════════
-   MENSAJE AI — AVATAR ANIMADO
-═══════════════════════════════════════════════ */
-
-.message-ai-avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  margin-top: 2px;
-  overflow: hidden;
-}
 
 /* Entrada de mensajes */
 .message-container {

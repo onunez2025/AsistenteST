@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Menu, Sun, Moon, User, Paperclip, File, Download, Search, Mic, Trash2, ArrowLeft, Square, ArrowUp, ArrowDown } from 'lucide-react';
-import { BotSparkleIcon } from './icons';
 import { parseMarkdown } from '../utils/markdown';
 import SuggestionChips from './SuggestionChips';
 import MessageActions from './MessageActions';
@@ -267,19 +266,13 @@ function ChatArea({
 
     return (
       <div className="message-container message-ai">
-        <div className="message-ai-inner">
-          <div className="message-ai-avatar">
-            <BotSparkleIcon />
-          </div>
-          <div className="message-ai-body">
-            <div className="message-ai-name">SIATC.IA</div>
-            <div className="message-ai-text">
-              {streamingContent
-                ? <span dangerouslySetInnerHTML={{ __html: parseMarkdown(streamingContent) }} />
-                : <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>Pensando...</span>
-              }
-              <span className="streaming-cursor" />
-            </div>
+        <div className="message-ai-body">
+          <div className="message-ai-text">
+            {streamingContent
+              ? <span dangerouslySetInnerHTML={{ __html: parseMarkdown(streamingContent) }} />
+              : <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>Pensando...</span>
+            }
+            <span className="streaming-cursor" />
           </div>
         </div>
       </div>
@@ -385,26 +378,22 @@ function ChatArea({
           if (msg.role === 'assistant') {
             return (
               <div key={index} className="message-container message-ai">
-                <div className="message-ai-inner">
-                  <div className="message-ai-avatar"><BotSparkleIcon /></div>
-                  <div className="message-ai-body">
-                    <div className="message-ai-name">SIATC.IA</div>
-                    <div className="message-ai-text">
-                      {renderMessageContent(msg.content, index, index === lastAiIndex)}
-                    </div>
-                    <MessageActions
-                      messageContent={msg.content || ''}
-                      onRegenerate={handleRegenerate}
-                      isLastAiMessage={index === lastAiIndex}
-                    />
-                    {msg.usage && (
-                      <div className="msg-usage-badge">
-                        🔢 {msg.usage.total_tokens.toLocaleString()} tokens
-                        &nbsp;·&nbsp;
-                        ${msg.usage.cost_usd.toFixed(6)} USD
-                      </div>
-                    )}
+                <div className="message-ai-body">
+                  <div className="message-ai-text">
+                    {renderMessageContent(msg.content, index, index === lastAiIndex)}
                   </div>
+                  <MessageActions
+                    messageContent={msg.content || ''}
+                    onRegenerate={handleRegenerate}
+                    isLastAiMessage={index === lastAiIndex}
+                  />
+                  {msg.usage && (
+                    <div className="msg-usage-badge">
+                      🔢 {msg.usage.total_tokens.toLocaleString()} tokens
+                      &nbsp;·&nbsp;
+                      ${msg.usage.cost_usd.toFixed(6)} USD
+                    </div>
+                  )}
                 </div>
               </div>
             );
