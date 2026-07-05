@@ -1125,17 +1125,30 @@
    LOGIN MODAL
 ═══════════════════════════════════════════════ */
 
-.login-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.6);
+.login-page {
+  min-height: 100vh;
+  background: var(--bg-base);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
-  backdrop-filter: blur(8px);
-  animation: fadeIn 0.2s ease;
+  position: relative;
 }
+.login-back-btn {
+  position: absolute;
+  top: 24px;
+  left: 24px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  transition: background var(--transition), color var(--transition);
+}
+.login-back-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+
 .login-card {
   background: var(--bg-surface);
   border: 1px solid var(--border);
@@ -1143,16 +1156,10 @@
   padding: 44px 40px;
   width: 100%;
   max-width: 420px;
-  box-shadow: 0 24px 64px rgba(0,0,0,0.35);
-  animation: loginCardIn 0.3s cubic-bezier(0.34,1.56,0.64,1) both;
-}
-@keyframes loginCardIn {
-  from { opacity: 0; transform: scale(0.92) translateY(16px); }
-  to   { opacity: 1; transform: none; }
 }
 .login-logo { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; }
 .login-logo-text { font-size: 1.1rem; font-weight: 700; color: var(--text-primary); }
-.login-title { font-size: 1.75rem; font-weight: 900; color: var(--text-primary); margin-bottom: 6px; }
+.login-title { font-size: 1.75rem; font-weight: 700; color: var(--text-primary); margin-bottom: 6px; }
 .login-subtitle { font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 32px; line-height: 1.5; }
 .login-field { margin-bottom: 18px; }
 .login-label { display: block; font-size: 0.8125rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 6px; letter-spacing: 0.3px; }
@@ -1168,9 +1175,21 @@
   transition: border-color var(--transition), box-shadow var(--transition);
 }
 .login-input:focus {
-  border-color: #4C5F80;
-  box-shadow: 0 0 0 3px rgba(76,95,128,0.15);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-light);
 }
+.login-password-wrap { position: relative; }
+.login-password-wrap .login-input { padding-right: 44px; }
+.login-eye-btn {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  background: none;
+  padding: 4px;
+}
+.login-eye-btn:hover { color: var(--text-secondary); }
 .login-error {
   font-size: 0.8125rem;
   color: #E93333;
@@ -1181,21 +1200,16 @@
 }
 .login-btn {
   width: 100%;
-  background: linear-gradient(135deg, #4C5F80, #3a4d6b);
+  background: var(--color-primary);
   color: #fff;
   padding: 14px;
   border-radius: var(--radius-sm);
   font-size: 1rem;
-  font-weight: 700;
-  transition: transform var(--transition), box-shadow var(--transition), opacity var(--transition);
+  font-weight: 600;
+  transition: opacity var(--transition);
   margin-top: 8px;
-  box-shadow: 0 4px 16px rgba(76,95,128,0.3);
-  letter-spacing: 0.3px;
 }
-.login-btn:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(76,95,128,0.4);
-}
+.login-btn:hover:not(:disabled) { opacity: 0.88; }
 .login-btn:disabled { opacity: 0.55; cursor: not-allowed; }
 
 /* ═══════════════════════════════════════════════
@@ -1423,24 +1437,6 @@
   letter-spacing: 0.5px;
   color: var(--text-primary);
   line-height: 1.1;
-}
-
-/* ═══════════════════════════════════════════════
-   LOGIN — OVERLAY CON FONDO BRANDED
-═══════════════════════════════════════════════ */
-
-.login-overlay {
-  position: fixed;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  backdrop-filter: blur(12px);
-  animation: fadeIn 0.25s ease;
-  background: radial-gradient(ellipse at 30% 30%, rgba(76,95,128,0.35) 0%, transparent 55%),
-              radial-gradient(ellipse at 70% 70%, rgba(233,51,51,0.2) 0%, transparent 55%),
-              rgba(0,0,0,0.55);
 }
 
 /* ═══════════════════════════════════════════════

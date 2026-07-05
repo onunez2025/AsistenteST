@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Eye, EyeOff, ArrowLeft } from 'lucide-react';
 import { SiatcLogoMark } from './icons';
 
 const API_BASE_URL = window.location.hostname === 'localhost' ? 'http://localhost:8000' : '';
@@ -41,8 +42,12 @@ const Login = ({ showLoginForm, onBack, onLoginSuccess }) => {
   };
 
   return (
-    <div className="login-overlay" onClick={onBack}>
-      <div className="login-card" onClick={e => e.stopPropagation()}>
+    <div className="login-page">
+      <button className="login-back-btn" onClick={onBack} type="button">
+        <ArrowLeft size={16} /> Volver
+      </button>
+
+      <div className="login-card">
         <div className="login-logo">
           <SiatcLogoMark size={40} />
           <div>
@@ -71,7 +76,7 @@ const Login = ({ showLoginForm, onBack, onLoginSuccess }) => {
 
           <div className="login-field">
             <label className="login-label" htmlFor="password">Contraseña</label>
-            <div style={{ position: 'relative' }}>
+            <div className="login-password-wrap">
               <input
                 type={showPassword ? 'text' : 'password'}
                 id="password"
@@ -80,19 +85,14 @@ const Login = ({ showLoginForm, onBack, onLoginSuccess }) => {
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 required
-                style={{ paddingRight: '72px' }}
               />
               <button
                 type="button"
+                className="login-eye-btn"
                 onClick={() => setShowPassword(v => !v)}
-                style={{
-                  position: 'absolute', right: '12px', top: '50%',
-                  transform: 'translateY(-50%)',
-                  fontSize: '0.75rem', color: 'var(--text-secondary)',
-                  background: 'none', border: 'none', cursor: 'pointer',
-                }}
+                aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
               >
-                {showPassword ? 'Ocultar' : 'Mostrar'}
+                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
             </div>
           </div>
@@ -105,7 +105,6 @@ const Login = ({ showLoginForm, onBack, onLoginSuccess }) => {
             type="submit"
             className="login-btn"
             disabled={isLoggingIn}
-            style={{ marginTop: '20px' }}
           >
             {isLoggingIn ? 'Iniciando sesión...' : 'Ingresar'}
           </button>
