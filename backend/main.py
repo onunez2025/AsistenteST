@@ -242,6 +242,15 @@ _login_attempts: Dict[str, list] = defaultdict(list)
 _LOGIN_MAX_ATTEMPTS = 5
 _LOGIN_WINDOW_SECS  = 300  # 5 minutos
 
+def _get_client_ip(request: Request) -> str:
+    """IP real del usuario. Detrás del proxy de Easypanel, request.client.host
+    es siempre la IP del proxy, no la del usuario — hay que leerla de
+    X-Forwarded-For (el primer valor de la lista es el cliente original)."""
+    xff = request.headers.get("x-forwarded-for")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
 def _check_login_rate_limit(ip: str) -> None:
     now = time.time()
     _login_attempts[ip] = [t for t in _login_attempts[ip] if now - t < _LOGIN_WINDOW_SECS]
@@ -1149,7 +1158,7 @@ class LoginRequest(BaseModel):
 
 @app.post("/api/auth/login")
 async def login_endpoint(req: LoginRequest, request: Request):
-    _check_login_rate_limit(request.client.host if request.client else "unknown")
+    _check_login_rate_limit(_get_client_ip(request))
     username = req.username.strip()
     password = req.password.strip()
     if not username or not password:
