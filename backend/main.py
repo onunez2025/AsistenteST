@@ -868,7 +868,8 @@ async def stream_chat_response(history_messages: List[ChatMessage], latest_messa
         return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
 
     def emit_usage(hit, miss, comp):
-        cost = (hit * 0.07 + miss * 0.27 + comp * 1.10) / 1_000_000
+        # Tarifas de deepseek-v4-pro (jul 2026): cache hit $0.003625/M, cache miss $0.435/M, output $0.87/M
+        cost = (hit * 0.003625 + miss * 0.435 + comp * 0.87) / 1_000_000
         return sse({
             "type": "usage",
             "prompt_cache_hit_tokens":  hit,
@@ -921,7 +922,7 @@ async def stream_chat_response(history_messages: List[ChatMessage], latest_messa
             # Para iteraciones con tool calls usamos stream=False para procesar rápido
             # Solo la respuesta final (sin tool calls) se hace con stream=True
             response = await client.chat.completions.create(
-                model="deepseek-chat",
+                model="deepseek-v4-pro",
                 messages=messages,
                 temperature=0.1,
                 max_tokens=8192,
@@ -1059,13 +1060,16 @@ async def generate_title_endpoint(request: TitleRequest, _: dict = Depends(requi
     try:
         client = AsyncOpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
         response = await client.chat.completions.create(
-            model="deepseek-chat",
+            model="deepseek-v4-flash",
             messages=[
                 {"role": "system", "content": "Eres un asistente que genera títulos cortos (máximo 6 palabras, sin puntos finales) para conversaciones de un asistente de gestión de servicios técnicos. Responde SOLO con el título, sin comillas ni explicaciones."},
                 {"role": "user",   "content": f"Genera un título para esta consulta: {request.first_message[:200]}"}
             ],
             max_tokens=20,
             temperature=0.3,
+            # V4 razona por defecto y el razonamiento consume max_tokens antes de
+            # emitir contenido — para un título de 6 palabras hay que apagarlo.
+            extra_body={"thinking": {"type": "disabled"}},
         )
         title = response.choices[0].message.content.strip().strip('"').strip("'")
         return {"title": title[:60] if title else request.first_message[:40]}

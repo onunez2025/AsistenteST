@@ -108,13 +108,16 @@ def classify_batch(client: OpenAI, batch: list, criteria: str,
     for attempt in range(3):
         try:
             resp = client.chat.completions.create(
-                model="deepseek-chat",
+                model="deepseek-v4-flash",
                 messages=[
                     {"role": "system", "content": CLASSIFY_SYSTEM},
                     {"role": "user",   "content": user_msg}
                 ],
                 temperature=0.0,
                 max_tokens=2048,
+                # V4 razona por defecto; en clasificación masiva el razonamiento
+                # consume el presupuesto de tokens y puede romper el formato de salida.
+                extra_body={"thinking": {"type": "disabled"}},
             )
             raw = resp.choices[0].message.content.strip()
             match = re.search(r'\[[\s\S]*\]', raw)
