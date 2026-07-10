@@ -1729,7 +1729,6 @@
   border-top-color: var(--color-primary);
   animation: spin 0.8s linear infinite;
 }
-@keyframes spin { to { transform: rotate(360deg); } }
 
 .artifact-card-text { min-width: 0; flex: 1; }
 .artifact-card-title {
