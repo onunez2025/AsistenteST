@@ -1862,3 +1862,10 @@
     border-left: none;
   }
 }
+
+.chat-area-layout {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  height: 100vh;
+}

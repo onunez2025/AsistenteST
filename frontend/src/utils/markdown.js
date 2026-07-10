@@ -18,6 +18,7 @@ marked.use({
       // (ver ChatArea.jsx). Si llega hasta acá es que algo no lo capturó — se oculta
       // en vez de mostrar el JSON crudo resaltado como código.
       if (lang === 'pregunta-usuario') return '';
+      if (lang === 'artefacto') return '';
       const validLang = lang && hljs.getLanguage(lang) ? lang : '';
       const highlighted = validLang
         ? hljs.highlight(text, { language: validLang }).value

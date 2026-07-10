@@ -3,6 +3,9 @@ import { Menu, Sun, Moon, User, Paperclip, File, Download, Search, Mic, Trash2, 
 import { parseMarkdown } from '../utils/markdown';
 import SuggestionChips from './SuggestionChips';
 import MessageActions from './MessageActions';
+import ArtifactCard from './ArtifactCard';
+import ArtifactPanel from './ArtifactPanel';
+import { extractArtifacts, detectOpenArtifact } from '../utils/artifactParser';
 
 function ChatArea({
   isSidebarOpen, setIsSidebarOpen,
@@ -26,6 +29,7 @@ function ChatArea({
   const [isMobile, setIsMobile] = useState(() => window.innerWidth <= 768);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const [showCostPanel, setShowCostPanel] = useState(false);
+  const [activeArtifact, setActiveArtifact] = useState(null);
   const textareaRef = useRef(null);
   const scrollContainerRef = useRef(null);
 
@@ -184,7 +188,7 @@ function ChatArea({
     );
   };
 
-  // Renderizado de mensajes con gráficos y Excel
+  // Renderizado de mensajes: markdown normal + tarjetas de artefactos
   const renderMessageContent = (content, index, isLastAiMessage = false) => {
     const questionMatch = /```pregunta-usuario\n([\s\S]*?)\n```/.exec(content);
     if (questionMatch) {
@@ -195,67 +199,18 @@ function ChatArea({
       }
     }
 
-    const chartMatch = /\[EmbedChart:([^\]]+)\]/i.exec(content)
-      || /\[[^\]]+\]\((https:\/\/[^)]+\.html)\)/i.exec(content);
-    const excelMatch = /\[Descargar Reporte Excel\]\(([^)]+)\)/i.exec(content)
-      || /\[[^\]]+\]\((https:\/\/[^)]+\.xlsx)\)/i.exec(content);
-    const pdfMatch = /\[EmbedPDF:([^\]]+)\]/i.exec(content);
-
-    const chartUrl = chartMatch?.[1] || null;
-    const excelUrl = excelMatch?.[1] || null;
-    const pdfUrl   = pdfMatch?.[1] || null;
-    const pdfName  = pdfUrl ? (pdfUrl.split('/').pop() || 'informe_tecnico.pdf') : null;
-
-    let clean = content;
-    if (chartUrl) clean = clean.replace(/\[EmbedChart:[^\]]+\]/gi, '').replace(/\[[^\]]+\]\(https:\/\/[^)]+\.html\)/gi, '');
-    if (excelUrl) clean = clean.replace(/\[Descargar Reporte Excel\]\([^)]+\)/gi, '').replace(/\[[^\]]+\]\(https:\/\/[^)]+\.xlsx\)/gi, '');
-    if (pdfUrl)   clean = clean.replace(/\[EmbedPDF:[^\]]+\]/gi, '');
+    const { cleanContent, artifacts } = extractArtifacts(content);
 
     return (
       <div className="message-body">
-        <div dangerouslySetInnerHTML={{ __html: parseMarkdown(clean.trim(), getFullUrl) }} />
-
-        {excelUrl && (
-          <div className="download-card">
-            <div className="download-icon"><Download size={20} /></div>
-            <div className="download-info">
-              <div className="download-title">Reporte Excel Generado</div>
-              <div className="download-size">Microsoft Excel (.xlsx)</div>
-            </div>
-            <a href={getFullUrl(excelUrl)} target="_blank" rel="noopener noreferrer" className="download-link-btn">Descargar</a>
-          </div>
-        )}
-
-        {chartUrl && (
-          <div className="chart-container-wrapper">
-            <div className="chart-header-actions">
-              <span className="chart-indicator">📊 Gráfico Interactivo</span>
-              <div className="chart-action-buttons">
-                <a href={getFullUrl(chartUrl)} target="_blank" rel="noopener noreferrer" className="chart-action-btn">Abrir ↗</a>
-                <button onClick={() => handleExportPNG(`chart-iframe-${index}`)} className="chart-action-btn">PNG 🖼️</button>
-                <a href={getFullUrl(chartUrl)} download={`grafico_st_${index}.html`} className="chart-action-btn">Guardar 💾</a>
-              </div>
-            </div>
-            <div className="chart-iframe-container">
-              <iframe id={`chart-iframe-${index}`} src={getFullUrl(chartUrl)} title="Gráfico ST" className="chart-iframe" />
-            </div>
-          </div>
-        )}
-
-        {pdfUrl && (
-          <div className="pdf-container-wrapper">
-            <div className="chart-header-actions">
-              <span className="chart-indicator">📄 Informe Técnico</span>
-              <div className="chart-action-buttons">
-                <a href={getFullUrl(pdfUrl)} target="_blank" rel="noopener noreferrer" className="chart-action-btn">Abrir ↗</a>
-                <a href={getFullUrl(pdfUrl)} download={pdfName} className="chart-action-btn">Descargar 💾</a>
-              </div>
-            </div>
-            <div className="pdf-iframe-container">
-              <iframe src={getFullUrl(pdfUrl)} title="Informe Técnico" className="pdf-iframe" />
-            </div>
-          </div>
-        )}
+        <div dangerouslySetInnerHTML={{ __html: parseMarkdown(cleanContent) }} />
+        {artifacts.map((artifact, i) => (
+          <ArtifactCard
+            key={`${index}-${i}`}
+            artifact={artifact}
+            onClick={setActiveArtifact}
+          />
+        ))}
       </div>
     );
   };
@@ -264,14 +219,29 @@ function ChatArea({
   const renderStreamingBubble = () => {
     if (!isLoading) return null;
 
+    const openArtifact = streamingContent ? detectOpenArtifact(streamingContent) : null;
+    const { cleanContent, artifacts } = streamingContent
+      ? extractArtifacts(streamingContent)
+      : { cleanContent: '', artifacts: [] };
+
     return (
       <div className="message-container message-ai">
         <div className="message-ai-body">
           <div className="message-ai-text">
-            {streamingContent
-              ? <span dangerouslySetInnerHTML={{ __html: parseMarkdown(streamingContent) }} />
-              : <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>Pensando...</span>
+            {cleanContent
+              ? <span dangerouslySetInnerHTML={{ __html: parseMarkdown(cleanContent) }} />
+              : (!openArtifact && <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>Pensando...</span>)
             }
+            {artifacts.map((artifact, i) => (
+              <ArtifactCard key={i} artifact={artifact} onClick={setActiveArtifact} />
+            ))}
+            {openArtifact && (
+              <ArtifactCard
+                artifact={{ type: 'reporte', titulo: openArtifact.titulo || 'reporte' }}
+                onClick={() => {}}
+                generating
+              />
+            )}
             <span className="streaming-cursor" />
           </div>
         </div>
@@ -428,7 +398,8 @@ function ChatArea({
   };
 
   return (
-    <div className="main-content">
+    <div className="chat-area-layout">
+      <div className="main-content">
       {/* Topbar */}
       <div className="topbar">
         {!isSidebarOpen && (
@@ -560,6 +531,12 @@ function ChatArea({
           </div>
         )
       )}
+      </div>
+      <ArtifactPanel
+        artifact={activeArtifact}
+        onClose={() => setActiveArtifact(null)}
+        getFullUrl={getFullUrl}
+      />
     </div>
   );
 }
