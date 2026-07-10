@@ -22,7 +22,7 @@ from requests.auth import HTTPBasicAuth
 from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks, Header, UploadFile, File, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, Response
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
@@ -1150,6 +1150,28 @@ async def download_file(subfolder: str, filename: str, _: dict = Depends(require
         raise HTTPException(status_code=404, detail="Archivo no encontrado.")
     media_type, _ = mimetypes.guess_type(filepath)
     return FileResponse(path=filepath, media_type=media_type or "application/octet-stream", filename=safe_filename)
+
+
+class ExportPdfRequest(BaseModel):
+    titulo: str
+    contenido_markdown: str
+
+@app.post("/api/artifacts/export-pdf")
+async def export_artifact_pdf(req: ExportPdfRequest, _: dict = Depends(require_auth)):
+    import pdf_export
+    if not req.contenido_markdown.strip():
+        raise HTTPException(status_code=400, detail="El contenido no puede estar vacío.")
+    try:
+        pdf_bytes = pdf_export.markdown_to_pdf_bytes(req.titulo, req.contenido_markdown)
+    except Exception as e:
+        logger.error(f"Error generando PDF de artefacto: {e}")
+        raise HTTPException(status_code=500, detail="No se pudo generar el PDF.")
+    filename = pdf_export.safe_pdf_filename(req.titulo)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 # ---------------------------------------------------------------------------
