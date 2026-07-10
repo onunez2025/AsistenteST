@@ -19,6 +19,12 @@ backend/static/charts/*
 !backend/static/reports/.gitkeep
 !backend/static/charts/.gitkeep
 
+# plotly.min.js se copia solo al arrancar (mcp_db.py), desde el paquete
+# plotly instalado — no se versiona, para que siempre coincida con la
+# version realmente instalada en cada entorno.
+backend/static/js/*
+!backend/static/js/.gitkeep
+
 # Node (Frontend)
 frontend/node_modules/
 frontend/dist-ssr/

@@ -1,11 +1,13 @@
 import os
 import sys
 import re
+import shutil
 import uuid
 import subprocess
 import logging
 import pyodbc
 import pandas as pd
+import plotly
 import plotly.express as px
 from datetime import datetime
 from dotenv import load_dotenv
@@ -80,6 +82,30 @@ JOBS_DIR    = os.path.join(STATIC_DIR, "jobs")
 os.makedirs(REPORTS_DIR, exist_ok=True)
 os.makedirs(CHARTS_DIR,  exist_ok=True)
 os.makedirs(JOBS_DIR,    exist_ok=True)
+
+# Los gráficos se sirven con el JS de Plotly alojado localmente en vez de
+# cargarlo de cdn.plot.ly en el navegador del usuario — en redes corporativas
+# con firewall/proxy restrictivo, ese CDN externo puede bloquearse o cargar
+# tan lento que el gráfico se queda a medio renderizar (solo título/ejes,
+# sin barras). Copiamos el plotly.min.js que ya trae instalado el paquete
+# `plotly` (siempre coincide con la versión instalada) a static/js/ una sola
+# vez al arrancar, y cada gráfico referencia esa copia local.
+STATIC_JS_DIR = os.path.join(STATIC_DIR, "js")
+os.makedirs(STATIC_JS_DIR, exist_ok=True)
+PLOTLY_JS_PATH = os.path.join(STATIC_JS_DIR, "plotly.min.js")
+PLOTLY_JS_URL  = "/static/js/plotly.min.js"
+
+def _ensure_plotly_js_bundled() -> None:
+    if os.path.exists(PLOTLY_JS_PATH):
+        return
+    bundled = os.path.join(os.path.dirname(plotly.__file__), "package_data", "plotly.min.js")
+    if os.path.exists(bundled):
+        shutil.copyfile(bundled, PLOTLY_JS_PATH)
+        logger.info(f"plotly.min.js copiado a {PLOTLY_JS_PATH} (autoalojado, sin dependencia de CDN externo)")
+    else:
+        logger.warning("No se encontró plotly.min.js en el paquete instalado; los gráficos usarán CDN como respaldo.")
+
+_ensure_plotly_js_bundled()
 
 # Initialize FastMCP Server
 mcp = FastMCP("Azure SQL Database Server")
@@ -264,7 +290,8 @@ def generar_grafico(sql_query: str, tipo_grafico: str, columna_x: str, columna_y
         filename = f"chart_{safe_title}_{timestamp}.html"
         filepath = os.path.join(CHARTS_DIR, filename)
         
-        fig.write_html(filepath, include_plotlyjs="cdn", full_html=True)
+        plotlyjs_src = PLOTLY_JS_URL if os.path.exists(PLOTLY_JS_PATH) else "cdn"
+        fig.write_html(filepath, include_plotlyjs=plotlyjs_src, full_html=True)
 
         url = f"/static/charts/{filename}"
         return f"Gráfico interactivo generado con éxito. [EmbedChart:{url}]"
