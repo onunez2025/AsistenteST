@@ -8,6 +8,10 @@ from fastmcp import FastMCP
 from azure.storage.blob import BlobServiceClient, ContentSettings
 from typing import List, Dict, Any, Optional
 
+# Autenticación OAuth contra FSM (reusada, no duplicada) para el lookup del tipo de
+# servicio inicial en analizar_cambio_tipo_servicio_cas.
+from mcp_fsm import _get_access_token as _fsm_get_access_token, _fsm_headers, FSM_QUERY_URL, FSM_ACCOUNT, FSM_COMPANY
+
 # Setup logging to stderr because stdout is used for MCP stdio protocol communication
 logging.basicConfig(
     level=logging.INFO,
@@ -470,20 +474,25 @@ def analizar_cambio_tipo_servicio_cas(
     fecha_fin: str = "",
 ) -> str:
     """
-    Detecta tickets donde el tipo de servicio fue cambiado entre C4C (tipo inicial) y FSM (tipo final).
-    Útil para identificar malas prácticas de un CAS que cambia el tipo de servicio para cerrar tickets
-    como SI-SI cuando no corresponde (ej. cambiar INSTALACIÓN a VERIFICACIÓN DE ÁREA).
+    Detecta tickets donde el tipo de servicio fue cambiado entre su valor inicial
+    (al momento de la visita, según el informe técnico/checklist de FSM) y su valor
+    final (SQL/FSM). Útil para identificar malas prácticas de un CAS que cambia el
+    tipo de servicio para cerrar tickets como SI-SI cuando no corresponde (ej. cambiar
+    INSTALACIÓN a VERIFICACIÓN DE ÁREA).
 
     Cruza dos fuentes:
-    - Tipo de servicio FINAL → FSM/SQL: campo 'Servicio' en ServiciosViewSQL.
-    - Tipo de servicio INICIAL → SAP C4C OData: campo 'ServiceTermsServiceIssueName'.
+    - Tipo de servicio FINAL   → SQL: campo 'Servicio' en ServiciosViewSQL.
+    - Tipo de servicio INICIAL → FSM: campo 'Categoría de servicio' del checklist
+      técnico (ChecklistInstanceElement), que se llena al cerrar la visita y NO se
+      sobreescribe si el ticket se reclasifica después en C4C.
 
     Devuelve conteo por día (y por CAS, si se consultan todos) y muestra de tickets
-    afectados con técnico asignado.
+    afectados con técnico asignado. Los tickets sin dato de tipo inicial disponible en
+    FSM se reportan aparte (no se cuentan como "sin cambio").
 
     Args:
-        tipo_servicio_final_like:   Patrón del tipo FINAL en FSM  (ej. 'VERIF' para VERIFICACIÓN).
-        tipo_servicio_inicial_like: Patrón del tipo INICIAL en C4C (ej. 'INSTAL' para INSTALACIÓN).
+        tipo_servicio_final_like:   Patrón del tipo FINAL en SQL/FSM (ej. 'VERIF').
+        tipo_servicio_inicial_like: Patrón del tipo INICIAL en el checklist FSM (ej. 'INSTAL').
         cas_nombre: Nombre o parte del CAS (ej. 'FAZZIO'). Vacío (por defecto) = todos los CAS
             combinados, con desglose de casos por CAS en el reporte.
         fecha_inicio: Fecha de visita inicio 'YYYY-MM-DD'. Vacío = sin límite inferior.
@@ -525,8 +534,13 @@ def analizar_cambio_tipo_servicio_cas(
             where_clauses.append("FechaVisita >= ?")
             params.append(fecha_inicio)
         if fecha_fin:
+            # FechaVisita es datetime (incluye hora), no solo fecha. Comparar contra
+            # "YYYY-MM-DD" a secas equivale a "YYYY-MM-DD 00:00:00" y excluye
+            # practicamente todas las visitas del dia final (que ocurren despues de
+            # medianoche) — confirmado en produccion: con fecha_fin='2026-07-10' el
+            # filtro roto devolvia 0 resultados donde el correcto devuelve 120.
             where_clauses.append("FechaVisita <= ?")
-            params.append(fecha_fin)
+            params.append(f"{fecha_fin} 23:59:59")
         where_sql = " AND ".join(where_clauses)
 
         sql = f"""
@@ -535,7 +549,8 @@ def analizar_cambio_tipo_servicio_cas(
                 CAS,
                 Servicio            AS ServicioFSM,
                 CAST(FechaVisita AS DATE) AS FechaVisita,
-                ISNULL(NombreTecnico,'') + ' ' + ISNULL(ApellidoTecnico,'') AS Tecnico
+                ISNULL(NombreTecnico,'') + ' ' + ISNULL(ApellidoTecnico,'') AS Tecnico,
+                ISNULL(LlamadaFSM,'')     AS LlamadaFSM
             FROM [APPGAC].[ServiciosViewSQL]
             WHERE {where_sql}
             ORDER BY FechaVisita DESC
@@ -552,37 +567,66 @@ def analizar_cambio_tipo_servicio_cas(
             f"en el período indicado."
         )
 
-    # ── PASO 2: C4C OData → tipo de servicio INICIAL por lotes de 30 ──
-    ticket_map = {str(r[0]).strip(): {"cas": r[1], "fsm": r[2], "fecha": str(r[3]), "tecnico": r[4].strip()} for r in rows}
-    ticket_ids = list(ticket_map.keys())
+    # ── PASO 2: FSM (checklist técnico) → tipo de servicio INICIAL por lotes de 30 ──
+    ticket_map = {
+        str(r[0]).strip(): {
+            "cas": r[1], "fsm": r[2], "fecha": str(r[3]), "tecnico": r[4].strip(),
+            "codigo_fsm": r[5].strip(),
+        }
+        for r in rows
+    }
 
-    headers = {"Content-Type": "application/json", "Accept": "application/json"}
-    auth    = HTTPBasicAuth(SAP_USER, SAP_PASSWORD)
-    c4c_types: dict = {}  # ticket_id → ServiceTermsServiceIssueName
+    # Códigos de actividad FSM (LlamadaFSM) únicos y no vacíos, listos para el lookup batched.
+    codigos_fsm = sorted({info["codigo_fsm"] for info in ticket_map.values() if info["codigo_fsm"]})
 
-    BATCH = 30
-    for i in range(0, len(ticket_ids), BATCH):
-        lote = ticket_ids[i : i + BATCH]
-        filter_expr = " or ".join(f"ID eq '{tid}'" for tid in lote)
-        url = (
-            f"{SAP_BASE_URL}/ServiceRequestCollection"
-            f"?$filter={filter_expr}"
-            f"&$select=ID,ServiceTermsServiceIssueName"
-            f"&$format=json&$top={BATCH}"
-        )
-        try:
-            resp = requests.get(url, auth=auth, headers=headers, timeout=15)
-            if resp.status_code == 200:
-                for item in resp.json().get("d", {}).get("results", []):
-                    c4c_types[str(item.get("ID", "")).strip()] = item.get("ServiceTermsServiceIssueName", "")
-        except Exception as e:
-            logger.error(f"Error consultando lote C4C: {e}")
+    fsm_token = _fsm_get_access_token()
+    tipo_inicial_por_codigo: dict = {}  # código de actividad FSM → "Categoría de servicio"
 
-    # ── PASO 3: cruzar — quedarse solo con los que cambiaron ──
+    if fsm_token and codigos_fsm:
+        fsm_headers_ = _fsm_headers(fsm_token)
+        dtos = "Activity.39;ChecklistInstance.18;ChecklistInstanceElement.8"
+        BATCH = 30
+        for i in range(0, len(codigos_fsm), BATCH):
+            lote = codigos_fsm[i : i + BATCH]
+            codigos_in = "','".join(c.replace("'", "''") for c in lote)
+            query = (
+                "SELECT a.code, e.value FROM Activity a "
+                "JOIN ChecklistInstance ci ON ci.object=a "
+                "JOIN ChecklistInstanceElement e ON e.checklistInstance=ci "
+                f"WHERE e.title='Categoría de servicio' AND a.code IN ('{codigos_in}') "
+                f"LIMIT {BATCH * 3}"
+            )
+            try:
+                resp = requests.post(
+                    FSM_QUERY_URL,
+                    params={"account": FSM_ACCOUNT, "company": FSM_COMPANY, "dtos": dtos},
+                    headers=fsm_headers_,
+                    json={"query": query},
+                    timeout=25,
+                )
+                if resp.status_code == 200:
+                    for item in resp.json().get("data", []):
+                        codigo = str(item.get("a", {}).get("code", "")).strip()
+                        valor  = item.get("e", {}).get("value")
+                        # Si un código aparece más de una vez (múltiples instancias de
+                        # checklist para la misma actividad), se queda con el primer
+                        # valor no nulo encontrado.
+                        if codigo and codigo not in tipo_inicial_por_codigo and valor:
+                            tipo_inicial_por_codigo[codigo] = valor
+                else:
+                    logger.error(f"Error consultando lote FSM (checklist): HTTP {resp.status_code} - {resp.text[:300]}")
+            except Exception as e:
+                logger.error(f"Error consultando lote FSM (checklist): {e}")
+
+    # ── PASO 3: cruzar — separar los que cambiaron de los que no tienen dato disponible ──
     inicial_lower = tipo_servicio_inicial_like.lower()
     cambios = []
+    sin_dato_fsm = []
     for tid, info in ticket_map.items():
-        tipo_inicial = c4c_types.get(tid, "")
+        tipo_inicial = tipo_inicial_por_codigo.get(info["codigo_fsm"], "")
+        if not tipo_inicial:
+            sin_dato_fsm.append(tid)
+            continue
         if inicial_lower in tipo_inicial.lower():
             cambios.append({
                 "ticket":         tid,
@@ -596,10 +640,11 @@ def analizar_cambio_tipo_servicio_cas(
     if not cambios:
         return (
             f"No se encontraron tickets de {cas_label} que hayan cambiado de "
-            f"'{tipo_servicio_inicial_like}' (C4C) a '{tipo_servicio_final_like}' (FSM) "
+            f"'{tipo_servicio_inicial_like}' (FSM checklist) a '{tipo_servicio_final_like}' (SQL/FSM) "
             f"en el período indicado.\n"
-            f"Tickets evaluados con tipo FSM coincidente: {len(ticket_ids)} | "
-            f"Tipos C4C recuperados: {len(c4c_types)}"
+            f"Tickets evaluados con tipo final coincidente: {len(ticket_map)} | "
+            f"Tipos iniciales recuperados de FSM: {len(tipo_inicial_por_codigo)} | "
+            f"Sin dato de tipo inicial en FSM: {len(sin_dato_fsm)}"
         )
 
     # ── PASO 4: agrupar por día (y por CAS, si se consultaron todos) ──
@@ -609,10 +654,11 @@ def analizar_cambio_tipo_servicio_cas(
 
     lines = [
         f"CAMBIOS DE TIPO DE SERVICIO — {cas_label.upper()}",
-        f"  C4C (inicial) LIKE '%{tipo_servicio_inicial_like}%'  →  FSM (final) LIKE '%{tipo_servicio_final_like}%'",
+        f"  FSM checklist (inicial) LIKE '%{tipo_servicio_inicial_like}%'  →  SQL/FSM (final) LIKE '%{tipo_servicio_final_like}%'",
         f"  Período: {fecha_inicio or 'inicio'} → {fecha_fin or 'hoy'}",
-        f"  Total casos detectados: {len(cambios)} de {len(ticket_ids)} tickets evaluados"
-        + (" (máx. 500 evaluados por consulta)" if len(ticket_ids) == 500 else "") + "\n",
+        f"  Total casos detectados: {len(cambios)} de {len(ticket_map)} tickets evaluados"
+        + (" (máx. 500 evaluados por consulta)" if len(ticket_map) == 500 else "") + "\n",
+        f"  Tickets sin dato de tipo inicial en FSM: {len(sin_dato_fsm)} (no se pudo verificar su tipo original)\n",
     ]
 
     if not cas_nombre:
@@ -633,7 +679,7 @@ def analizar_cambio_tipo_servicio_cas(
         lines.append(f"{fecha:<12} {len(casos):>5}   {ids_str}{sufijo}")
 
     lines.append("\nDetalle de casos (primeros 20):")
-    lines.append(f"{'Ticket':<10} {'CAS':<30} {'Fecha':<12} {'Tipo C4C (inicial)':<30} {'Tipo FSM (final)':<25} Técnico")
+    lines.append(f"{'Ticket':<10} {'CAS':<30} {'Fecha':<12} {'Tipo FSM inicial (checklist)':<30} {'Tipo final (SQL/FSM)':<25} Técnico")
     lines.append("─" * 130)
     for c in cambios[:20]:
         lines.append(
