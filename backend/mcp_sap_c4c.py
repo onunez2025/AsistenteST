@@ -76,63 +76,124 @@ def _build_odata_filter_from_filtros(filtros):
             partes.append(f"{propiedad} eq '{valor_escapado}'")
     return " and ".join(partes), None
 
+
+def _odata_nav_collection(value):
+    """Normaliza una propiedad de navegación 0..n expandida por OData.
+
+    Algunos tenants de SAP C4C devuelven la colección envuelta como
+    {"results": [...]} (convención estándar de OData V2 JSON) y otros la
+    devuelven como una lista JSON plana. Soporta ambos formatos.
+    """
+    if isinstance(value, dict):
+        return value.get("results", [])
+    if isinstance(value, list):
+        return value
+    return []
+
 # Initialize FastMCP Server
 mcp = FastMCP("SAP C4C Server")
 
 @mcp.tool()
 def obtener_ticket_c4c_tiempo_real(ticket_id: str) -> str:
     """
-    Consulta en tiempo real el estado de un ticket específico directamente en SAP C4C
-    utilizando el API OData. Útil para verificar estados actuales, fechas de creación
-    o prioridades directamente de la fuente de origen en SAP.
-    
+    Consulta en tiempo real el detalle completo de un ticket específico directamente en
+    SAP C4C utilizando el API OData: datos generales, contacto del cliente, ubicación
+    del servicio, producto/garantía y la descripción real del caso reportado por el
+    cliente. Útil para responder cualquier pregunta sobre un ticket puntual.
+
     Args:
         ticket_id: El ID numérico del ticket de SAP C4C (ej. '123456').
     """
     logger.info(f"[MCP TOOL] obtener_ticket_c4c_tiempo_real para ticket: {ticket_id}")
-    
+
     if not SAP_BASE_URL or not SAP_USER or not SAP_PASSWORD:
         return "Error: Las credenciales de SAP C4C no están configuradas en el servidor MCP."
-        
+
     try:
-        url = f"{SAP_BASE_URL}/ServiceRequestCollection?$format=json&$filter=ID eq '{ticket_id}'"
-        
+        expand = "ServiceRequestParty,ServiceRequestServicePointLocation/ServiceRequestServicePointLocationAddress,ServiceRequestTextCollection"
+        url = f"{SAP_BASE_URL}/ServiceRequestCollection?$format=json&$filter=ID eq '{ticket_id}'&$expand={expand}"
+
         headers = {
             "Content-Type": "application/json",
             "Accept": "application/json"
         }
-        
+
         resp = requests.get(
-            url, 
-            auth=HTTPBasicAuth(SAP_USER, SAP_PASSWORD), 
+            url,
+            auth=HTTPBasicAuth(SAP_USER, SAP_PASSWORD),
             headers=headers,
-            timeout=10
+            timeout=15
         )
-        
+
         if resp.status_code == 200:
             data = resp.json()
             results = data.get("d", {}).get("results", [])
-            if results:
-                ticket_data = results[0]
-                # Filtrar campos relevantes para evitar sobrecargar el contexto
-                filtered_data = {
-                    "ID": ticket_data.get("ID"),
-                    "Name": ticket_data.get("Name"),
-                    "ServiceRequestLifeCycleStatusCode": ticket_data.get("ServiceRequestLifeCycleStatusCode"),
-                    "ServiceRequestLifeCycleStatusCodeText": ticket_data.get("ServiceRequestLifeCycleStatusCodeText"),
-                    "CreationDateTime": ticket_data.get("CreationDateTime"),
-                    "LastChangeDateTime": ticket_data.get("LastChangeDateTime"),
-                    "ServicePriorityCode": ticket_data.get("ServicePriorityCode"),
-                    "ServicePriorityCodeText": ticket_data.get("ServicePriorityCodeText"),
-                    "RequestedFulfillmentPeriodStartDateTime": ticket_data.get("RequestedFulfillmentPeriodStartDateTime"),
-                    "RequestedFulfillmentPeriodEndDateTime": ticket_data.get("RequestedFulfillmentPeriodEndDateTime"),
-                }
-                return f"Datos del Ticket {ticket_id} en SAP C4C en tiempo real:\n{filtered_data}"
-            else:
+            if not results:
                 return f"No se encontró el ticket '{ticket_id}' en SAP C4C."
+
+            ticket_data = results[0]
+
+            # Cliente: filtrar el array de partes involucradas por rol "Cliente" (RoleCode 1001)
+            cliente = {}
+            parties = _odata_nav_collection(ticket_data.get("ServiceRequestParty"))
+            for p in parties:
+                if p.get("RoleCode") == "1001":
+                    cliente = {
+                        "Nombre": p.get("PartyName"),
+                        "Telefono": p.get("Phone"),
+                        "Celular": p.get("Mobile"),
+                        "Email": p.get("Email"),
+                    }
+                    break
+
+            # Ubicación de servicio (propiedad navegable 0..1, no viene envuelta en "results")
+            ubicacion = {}
+            loc = ticket_data.get("ServiceRequestServicePointLocation") or {}
+            addr = loc.get("ServiceRequestServicePointLocationAddress") or {}
+            if addr:
+                ubicacion = {
+                    "Pais": addr.get("CountryText"),
+                    "Departamento": addr.get("StateText"),
+                    "Distrito": addr.get("District"),
+                    "Direccion": addr.get("AddressLine2"),
+                    "CodigoPostal": addr.get("PostalCode"),
+                }
+
+            # Descripción real del caso (array de textos, se busca el tipo correcto)
+            descripcion = ""
+            textos = _odata_nav_collection(ticket_data.get("ServiceRequestTextCollection"))
+            for t in textos:
+                if t.get("TypeCodeText") == "Descripción del caso":
+                    descripcion = t.get("Text", "")
+                    break
+
+            filtered_data = {
+                "ID": ticket_data.get("ID"),
+                "Nombre": ticket_data.get("Name"),
+                "Estado": ticket_data.get("ServiceRequestLifeCycleStatusCodeText"),
+                "Prioridad": ticket_data.get("ServicePriorityCodeText"),
+                "TipoServicio": ticket_data.get("ServiceTermsServiceIssueName"),
+                "Empresa": ticket_data.get("zIDEmpresa_SDK"),
+                "FechaCreacion": ticket_data.get("CreationDateTime"),
+                "UltimaModificacion": ticket_data.get("LastChangeDateTime"),
+                "FechaProgramadaInicio": ticket_data.get("RequestedFulfillmentPeriodStartDateTime"),
+                "FechaProgramadaFin": ticket_data.get("RequestedFulfillmentPeriodEndDateTime"),
+                "Cliente": cliente,
+                "Ubicacion": ubicacion,
+                "Producto": {
+                    "ID": ticket_data.get("ProductID"),
+                    "Descripcion": ticket_data.get("ProductDescription"),
+                    "ProductoRegistrado": ticket_data.get("InstallationPointID"),
+                    "GarantiaDesde": ticket_data.get("WarrantyFrom"),
+                    "GarantiaHasta": ticket_data.get("WarrantyTo"),
+                    "TipoGarantia": ticket_data.get("WarrantyGoodwillCodeText"),
+                },
+                "DescripcionDelCaso": descripcion,
+            }
+            return f"Datos del Ticket {ticket_id} en SAP C4C en tiempo real:\n{filtered_data}"
         else:
             return f"Error al conectar con SAP C4C OData: {resp.status_code} - {resp.text}"
-            
+
     except Exception as e:
         logger.error(f"Error en obtener_ticket_c4c_tiempo_real: {e}")
         return f"Error al consultar SAP C4C en el servidor MCP: {str(e)}"
