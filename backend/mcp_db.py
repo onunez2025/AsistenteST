@@ -123,14 +123,27 @@ def get_db_connection():
     )
     return pyodbc.connect(conn_str)
 
+# Esquemas fuera del alcance de negocio de la IA: EBM contiene las credenciales
+# de login (incl. PasswordHash) y KIRA el historial privado de conversaciones de
+# TODOS los usuarios. La conexión SQL de este archivo usa el mismo login de BD
+# que main.py, así que sin este check un SELECT bien armado (o inyección de
+# prompt) podría leerlas igual que cualquier tabla de negocio.
+_DENIED_SQL_SCHEMAS = ("EBM", "KIRA")
+
 def is_query_safe(query: str) -> bool:
-    """Verifies that the query is read-only (SELECT or WITH)."""
+    """Verifies that the query is read-only (SELECT or WITH) and doesn't
+    reference schemas fuera del alcance de la IA (ver _DENIED_SQL_SCHEMAS)."""
     clean_query = query.strip().upper()
     if not (clean_query.startswith("SELECT") or clean_query.startswith("WITH")):
         return False
     dangerous_keywords = ["INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "TRUNCATE", "CREATE", "EXEC", "EXECUTE", "GRANT", "REVOKE"]
     for kw in dangerous_keywords:
         pattern = r"\b" + re.escape(kw) + r"\b"
+        if re.search(pattern, clean_query):
+            return False
+    for schema in _DENIED_SQL_SCHEMAS:
+        # coincide con EBM.Users, [EBM].[Users], EBM.[Users], etc.
+        pattern = r"\[?\b" + re.escape(schema) + r"\b\]?\s*\."
         if re.search(pattern, clean_query):
             return False
     return True
@@ -492,6 +505,8 @@ def verificar_estado_analisis(job_id: str) -> str:
     Args:
         job_id: ID devuelto por iniciar_analisis_masivo.
     """
+    if not re.fullmatch(r"[0-9a-f]{10}", job_id):
+        return "ID de análisis inválido."
     path = os.path.join(JOBS_DIR, f"{job_id}.json")
     if not os.path.exists(path):
         return f"No se encontró el análisis con ID '{job_id}'. Verifica que el ID sea correcto."
@@ -554,6 +569,8 @@ def cancelar_analisis(job_id: str) -> str:
     Args:
         job_id: ID del análisis a cancelar.
     """
+    if not re.fullmatch(r"[0-9a-f]{10}", job_id):
+        return "ID de análisis inválido."
     progress_path = os.path.join(JOBS_DIR, f"{job_id}.json")
     cancel_flag   = os.path.join(JOBS_DIR, f"{job_id}_cancel.flag")
 

@@ -7,6 +7,7 @@ import uuid
 import base64
 import io
 import time
+import socket
 import ipaddress
 from collections import defaultdict
 from urllib.parse import urlparse
@@ -287,6 +288,13 @@ def _check_login_rate_limit(ip: str) -> None:
 _ALLOWED_URL_SCHEMES = {"http", "https"}
 
 def _is_safe_url(url: str) -> bool:
+    """Valida que una URL de adjunto no apunte a la red interna (SSRF).
+
+    Si host es un hostname (no una IP literal), se resuelve por DNS y se
+    valida CADA IP que devuelve — un hostname puede apuntar a una IP privada
+    (ej. un dominio propio del atacante con un registro A a 169.254.169.254
+    o a 10.x/172.16.x/192.168.x) y antes no se resolvía en absoluto, dejando
+    pasar cualquier hostname sin más chequeo."""
     try:
         parsed = urlparse(url)
         if parsed.scheme not in _ALLOWED_URL_SCHEMES:
@@ -294,14 +302,20 @@ def _is_safe_url(url: str) -> bool:
         host = parsed.hostname
         if not host:
             return False
-        if host in ("localhost", "127.0.0.1", "::1", "0.0.0.0"):
+        if host.lower() == "localhost":
             return False
         try:
-            addr = ipaddress.ip_address(host)
-            if addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved:
-                return False
+            addrs = [ipaddress.ip_address(host)]
         except ValueError:
-            pass  # es un hostname, no una IP — permitir
+            try:
+                addrs = [ipaddress.ip_address(info[4][0]) for info in socket.getaddrinfo(host, None)]
+            except socket.gaierror:
+                return False
+        if not addrs:
+            return False
+        for addr in addrs:
+            if addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved or addr.is_multicast or addr.is_unspecified:
+                return False
         return True
     except Exception:
         return False
@@ -316,7 +330,9 @@ def parse_attachment_to_text(attachment: Attachment) -> str:
         if attachment.url:
             if not _is_safe_url(attachment.url):
                 raise Exception("URL de adjunto no permitida por política de seguridad.")
-            resp = requests.get(attachment.url, timeout=15)
+            # allow_redirects=False: una redirección podría apuntar a un destino
+            # interno no validado por _is_safe_url (que solo revisa la URL original).
+            resp = requests.get(attachment.url, timeout=15, allow_redirects=False)
             if resp.status_code == 200:
                 file_bytes = resp.content
             else:
