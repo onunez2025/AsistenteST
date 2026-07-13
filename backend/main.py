@@ -257,10 +257,20 @@ _LOGIN_WINDOW_SECS  = 300  # 5 minutos
 def _get_client_ip(request: Request) -> str:
     """IP real del usuario. Detrás del proxy de Easypanel, request.client.host
     es siempre la IP del proxy, no la del usuario — hay que leerla de
-    X-Forwarded-For (el primer valor de la lista es el cliente original)."""
+    X-Forwarded-For.
+
+    Se toma el ÚLTIMO valor de la lista, no el primero: cada proxy AGREGA su
+    propia observación al final de la cabecera en vez de reemplazarla, así que
+    el primer valor lo puede escribir libremente el cliente (spoofing) y no es
+    confiable para nada — incluyendo el rate-limit de login, que antes se podía
+    saltar completamente rotando ese valor en cada intento. Delante de esta app
+    hay exactamente un proxy de confianza (el de Easypanel), así que el último
+    valor es el que él mismo agregó a partir de la conexión TCP real, y ese sí
+    es confiable. Si en el futuro se agrega otro proxy/CDN delante de Easypanel,
+    hay que ajustar esto para tomar el valor N-ésimo desde el final."""
     xff = request.headers.get("x-forwarded-for")
     if xff:
-        return xff.split(",")[0].strip()
+        return xff.split(",")[-1].strip()
     return request.client.host if request.client else "unknown"
 
 def _check_login_rate_limit(ip: str) -> None:
