@@ -232,73 +232,59 @@ def buscar_tickets_c4c(
     lugar_filtro_str = None
 
     if tienda:
-        STORE_MAP = {
-            "promart": ["2540", "4"],
-            "sodimac": ["3", "3348"],
-            "hiraoka": ["3", "2220", "46"],
-            "maestro": ["1311", "743", "1498", "2268", "3005", "3008", "3034", "3032"],
-            "falabella": ["144", "177", "3101", "3807", "1527", "321", "1389", "1529", "171"],
-            "cassinelli": ["2458", "3381", "2457", "309", "293", "303"],
-            "ripley": ["3414", "3413", "180", "2548", "181"],
-            "calidda": ["3977"],
-            "tottus": ["3030", "934", "3046", "2444", "926"],
-            "oechsle": ["529", "487", "1836", "3452"],
-            "plaza vea": ["511", "149", "131", "143", "133", "3827"]
-        }
-
-        name_lower = tienda.lower().strip()
+        # No usamos un mapa fijo tienda->codigo: se confirmo en produccion que estaba
+        # mal (ej. "promart" incluia el codigo "4", que en realidad pertenece a
+        # "SODIMAC PERU S.A.S." segun la propia SAP C4C, contaminando los resultados
+        # de busqueda). En su lugar, resolvemos los codigos reales de la tienda
+        # consultando tickets reales: buscamos en GAC_APP_TB_TICKETS por nombre de
+        # tienda y tomamos los codigos zIDLugarCompra_SDK que esos tickets tienen
+        # de verdad en SAP C4C en este momento — la misma data de C4C, sin listas
+        # mantenidas a mano que se desactualizan.
         matched_codes = []
+        try:
+            import pyodbc
+            SQL_SERVER = os.getenv("SQL_SERVER")
+            SQL_DATABASE = os.getenv("SQL_DATABASE")
+            SQL_USER = os.getenv("SQL_USER")
+            SQL_PASSWORD = os.getenv("SQL_PASSWORD")
 
-        for key, codes in STORE_MAP.items():
-            if key in name_lower or name_lower in key:
-                matched_codes.extend(codes)
+            if SQL_SERVER and SQL_DATABASE and SQL_USER and SQL_PASSWORD:
+                conn_str = (
+                    f"DRIVER={{{os.getenv('SQL_ODBC_DRIVER', 'ODBC Driver 17 for SQL Server')}}};"
+                    f"SERVER={SQL_SERVER};"
+                    f"DATABASE={SQL_DATABASE};"
+                    f"UID={SQL_USER};"
+                    f"PWD={SQL_PASSWORD};"
+                    f"Encrypt=yes;"
+                    f"TrustServerCertificate=no;"
+                )
+                conn = pyodbc.connect(conn_str)
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT TOP 10 ID_Ticket FROM dbo.GAC_APP_TB_TICKETS WHERE TIENDA LIKE ? AND ID_Ticket IS NOT NULL",
+                    (f"%{tienda}%",)
+                )
+                rows = cursor.fetchall()
+                conn.close()
 
-        if not matched_codes:
-            logger.info(f"Store '{tienda}' not in predefined map. Performing fallback database lookup...")
-            try:
-                import pyodbc
-                SQL_SERVER = os.getenv("SQL_SERVER")
-                SQL_DATABASE = os.getenv("SQL_DATABASE")
-                SQL_USER = os.getenv("SQL_USER")
-                SQL_PASSWORD = os.getenv("SQL_PASSWORD")
-
-                if SQL_SERVER and SQL_DATABASE and SQL_USER and SQL_PASSWORD:
-                    conn_str = (
-                        f"DRIVER={{{os.getenv('SQL_ODBC_DRIVER', 'ODBC Driver 17 for SQL Server')}}};"
-                        f"SERVER={SQL_SERVER};"
-                        f"DATABASE={SQL_DATABASE};"
-                        f"UID={SQL_USER};"
-                        f"PWD={SQL_PASSWORD};"
-                        f"Encrypt=yes;"
-                        f"TrustServerCertificate=no;"
-                    )
-                    conn = pyodbc.connect(conn_str)
-                    cursor = conn.cursor()
-                    cursor.execute(
-                        "SELECT TOP 10 ID_Ticket FROM dbo.GAC_APP_TB_TICKETS WHERE TIENDA LIKE ? AND ID_Ticket IS NOT NULL",
-                        (f"%{tienda}%",)
-                    )
-                    rows = cursor.fetchall()
-                    conn.close()
-
-                    if rows:
-                        headers_lookup = {"Accept": "application/json"}
-                        auth = HTTPBasicAuth(SAP_USER, SAP_PASSWORD)
-                        for r in rows:
-                            tid = r[0]
-                            lookup_url = f"{SAP_BASE_URL}/ServiceRequestCollection?$filter=ID eq '{tid}'&$select=zIDLugarCompra_SDK&$format=json"
-                            try:
-                                lookup_resp = requests.get(lookup_url, auth=auth, headers=headers_lookup, timeout=5)
-                                if lookup_resp.status_code == 200:
-                                    res = lookup_resp.json().get('d', {}).get('results', [])
-                                    if res and res[0].get('zIDLugarCompra_SDK'):
-                                        code = res[0].get('zIDLugarCompra_SDK').lstrip('0') or '0'
-                                        if code not in matched_codes:
-                                            matched_codes.append(code)
-                            except Exception as ex:
-                                logger.error(f"Error querying OData for ticket {tid}: {ex}")
-            except Exception as e:
-                logger.error(f"Error in dynamic store lookup: {e}")
+                if rows:
+                    headers_lookup = {"Accept": "application/json"}
+                    auth = HTTPBasicAuth(SAP_USER, SAP_PASSWORD)
+                    for r in rows:
+                        tid = r[0]
+                        lookup_url = f"{SAP_BASE_URL}/ServiceRequestCollection?$filter=ID eq '{tid}'&$select=zIDLugarCompra_SDK&$format=json"
+                        try:
+                            lookup_resp = requests.get(lookup_url, auth=auth, headers=headers_lookup, timeout=5)
+                            if lookup_resp.status_code == 200:
+                                res = lookup_resp.json().get('d', {}).get('results', [])
+                                if res and res[0].get('zIDLugarCompra_SDK'):
+                                    code = res[0].get('zIDLugarCompra_SDK').lstrip('0') or '0'
+                                    if code not in matched_codes:
+                                        matched_codes.append(code)
+                        except Exception as ex:
+                            logger.error(f"Error querying OData for ticket {tid}: {ex}")
+        except Exception as e:
+            logger.error(f"Error resolviendo codigo(s) de tienda '{tienda}': {e}")
 
         if not matched_codes:
             return f"No se pudo determinar el código de SAP C4C para la tienda/lugar de compra '{tienda}'."
