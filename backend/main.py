@@ -503,7 +503,7 @@ TOOL_LABELS: Dict[str, str] = {
     "verificar_estado_analisis":               "Verificando progreso del análisis...",
     "cancelar_analisis":                       "Cancelando análisis...",
     "obtener_adjuntos_ticket_c4c":             "Obteniendo adjuntos del ticket en SAP C4C...",
-    "analizar_cambio_tipo_servicio_cas":       "Cruzando FSM y C4C para detectar cambios de tipo de servicio...",
+    "analizar_cambio_tipo_servicio_cas":       "Cruzando FSM y SQL para detectar cambios de tipo de servicio...",
     "listar_encuestas_qualtrics":              "Listando encuestas de Qualtrics...",
     "obtener_respuestas_encuesta":             "Descargando respuestas de encuesta Qualtrics...",
     "buscar_respuesta_por_ticket":             "Buscando calificación de encuesta para el ticket...",
@@ -786,7 +786,7 @@ Identifica la fuente ANTES de consultar. Aplica la primera regla que coincida.
    ▸ Ticket específico en tiempo real → obtener_ticket_c4c_tiempo_real(ticket_id)
    ▸ Buscar/contar tickets (por tienda, fecha, filtros) → buscar_tickets_c4c(tienda, fecha_inicio, fecha_fin, solo_contar, ...)
    ▸ PDF/informe técnico del ticket  → obtener_adjuntos_ticket_c4c(ticket_id)
-   ▸ Cambio tipo servicio C4C→FSM    → analizar_cambio_tipo_servicio_cas(cas, tipo_final_like, tipo_inicial_like)
+   ▸ Cambio tipo servicio (inicial=checklist FSM, final=SQL/FSM) → analizar_cambio_tipo_servicio_cas(cas, tipo_final_like, tipo_inicial_like)
    ⛔ NUNCA busques tickets de tiendas en ServiciosViewSQL.
 
 🟡 USA SAP SD_VENTAS cuando la pregunta contenga:
