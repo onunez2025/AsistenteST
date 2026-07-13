@@ -44,20 +44,24 @@ mcp = FastMCP("FSM Server")
 # para que use una de las conocidas o pida ayuda al usuario.
 # ---------------------------------------------------------------------------
 DTO_VERSIONS = {
-    "Activity":            39,
-    "ActivityCode":        14,
-    "Address":             21,
-    "Attachment":          18,
-    "BusinessPartner":     23,
-    "ChecklistInstance":   18,
-    "Contact":             17,
-    "Equipment":           23,
-    "Person":              24,
-    "PurchaseOrder":       14,
-    "ServiceCall":         26,
-    "ServiceCallStatus":   15,
-    "ServiceCallType":     15,
-    "Skill":               9,
+    "Activity":                39,
+    "ActivityCode":             14,
+    "Address":                  21,
+    "Attachment":               18,
+    "BusinessPartner":          23,
+    "ChecklistInstance":        18,
+    # Version determinada empiricamente (no documentada por SAP): se probo cada
+    # version del 1 al 40 contra el tenant real hasta obtener HTTP 200 en vez de
+    # "CA-17: Invalid DTO" / "CA-19: No resource found".
+    "ChecklistInstanceElement": 8,
+    "Contact":                  17,
+    "Equipment":                23,
+    "Person":                   24,
+    "PurchaseOrder":            14,
+    "ServiceCall":              26,
+    "ServiceCallStatus":        15,
+    "ServiceCallType":          15,
+    "Skill":                    9,
 }
 
 # ---------------------------------------------------------------------------
@@ -146,8 +150,8 @@ def ejecutar_consulta_fsm(consulta_coresql: str, entidades: str) -> str:
 
     Entidades (DTOs) disponibles y su versión actual (usa el nombre SIN el número en 'entidades',
     la herramienta agrega la versión automáticamente): Activity, ActivityCode, Address, Attachment,
-    BusinessPartner, ChecklistInstance, Contact, Equipment, Person, PurchaseOrder, ServiceCall,
-    ServiceCallStatus, ServiceCallType, Skill.
+    BusinessPartner, ChecklistInstance, ChecklistInstanceElement, Contact, Equipment, Person,
+    PurchaseOrder, ServiceCall, ServiceCallStatus, ServiceCallType, Skill.
 
     Args:
         consulta_coresql: La consulta en formato CoreSQL (ver reglas arriba). Debe empezar con SELECT.
