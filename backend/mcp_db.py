@@ -221,7 +221,7 @@ def generar_reporte_excel(sql_query: str, nombre_reporte: str) -> str:
             # Fijar primera fila
             ws.freeze_panes = "A2"
         
-        url = f"/static/reports/{filename}"
+        url = f"/api/download/reports/{filename}"
         return f"Reporte Excel generado con éxito. Descárgalo aquí: [Descargar Reporte Excel]({url})"
 
         
@@ -293,7 +293,7 @@ def generar_grafico(sql_query: str, tipo_grafico: str, columna_x: str, columna_y
         plotlyjs_src = PLOTLY_JS_URL if os.path.exists(PLOTLY_JS_PATH) else "cdn"
         fig.write_html(filepath, include_plotlyjs=plotlyjs_src, full_html=True)
 
-        url = f"/static/charts/{filename}"
+        url = f"/api/download/charts/{filename}"
         return f"Gráfico interactivo generado con éxito. [EmbedChart:{url}]"
 
         

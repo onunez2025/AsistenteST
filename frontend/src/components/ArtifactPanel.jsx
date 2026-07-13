@@ -4,6 +4,11 @@ import { X, Copy, Check, Download, ExternalLink } from 'lucide-react';
 import { parseMarkdown } from '../utils/markdown';
 import { API_BASE_URL } from '../services/apiClient';
 
+function authFetch(url) {
+  const token = localStorage.getItem('siatc_token');
+  return fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+}
+
 function ExcelPreview({ url }) {
   const [rows, setRows] = useState(null);
   const [error, setError] = useState(null);
@@ -12,7 +17,7 @@ function ExcelPreview({ url }) {
     let cancelled = false;
     setRows(null);
     setError(null);
-    fetch(url)
+    authFetch(url)
       .then(res => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.arrayBuffer();
@@ -52,6 +57,37 @@ function ExcelPreview({ url }) {
       )}
     </div>
   );
+}
+
+function ChartPreview({ url, titulo }) {
+  const [blobUrl, setBlobUrl] = useState(null);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    let objectUrl = null;
+    setBlobUrl(null);
+    setError(null);
+    authFetch(url)
+      .then(res => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.blob();
+      })
+      .then(blob => {
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(blob);
+        setBlobUrl(objectUrl);
+      })
+      .catch(err => { if (!cancelled) setError(err.message); });
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [url]);
+
+  if (error) return <div className="artifact-panel-error">No se pudo cargar el gráfico: {error}</div>;
+  if (!blobUrl) return <div className="artifact-panel-loading">Cargando gráfico…</div>;
+  return <iframe src={blobUrl} title={titulo} className="artifact-panel-iframe" />;
 }
 
 export default function ArtifactPanel({ artifact, onClose, getFullUrl }) {
@@ -96,6 +132,36 @@ export default function ArtifactPanel({ artifact, onClose, getFullUrl }) {
     }
   };
 
+  const handleOpenInNewTab = async (url) => {
+    try {
+      const res = await authFetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      window.open(blobUrl, '_blank', 'noopener,noreferrer');
+    } catch (err) {
+      alert(`No se pudo abrir el archivo: ${err.message}`);
+    }
+  };
+
+  const handleDownloadArtifactFile = async (url) => {
+    try {
+      const res = await authFetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = url.split('/').pop();
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+      alert(`No se pudo descargar el archivo: ${err.message}`);
+    }
+  };
+
   const fullUrl = artifact.url ? getFullUrl(artifact.url) : null;
 
   return (
@@ -118,7 +184,17 @@ export default function ArtifactPanel({ artifact, onClose, getFullUrl }) {
             </button>
           </>
         )}
-        {(artifact.type === 'excel' || artifact.type === 'chart' || artifact.type === 'pdf') && fullUrl && (
+        {(artifact.type === 'excel' || artifact.type === 'chart') && fullUrl && (
+          <>
+            <button className="artifact-panel-action-btn" onClick={() => handleOpenInNewTab(fullUrl)} type="button">
+              <ExternalLink size={14} /> Abrir en pestaña nueva
+            </button>
+            <button className="artifact-panel-action-btn" onClick={() => handleDownloadArtifactFile(fullUrl)} type="button">
+              <Download size={14} /> Descargar
+            </button>
+          </>
+        )}
+        {artifact.type === 'pdf' && fullUrl && (
           <>
             <a className="artifact-panel-action-btn" href={fullUrl} target="_blank" rel="noopener noreferrer">
               <ExternalLink size={14} /> Abrir en pestaña nueva
@@ -138,9 +214,7 @@ export default function ArtifactPanel({ artifact, onClose, getFullUrl }) {
           />
         )}
         {artifact.type === 'excel' && fullUrl && <ExcelPreview url={fullUrl} />}
-        {artifact.type === 'chart' && fullUrl && (
-          <iframe src={fullUrl} title={artifact.titulo} className="artifact-panel-iframe" />
-        )}
+        {artifact.type === 'chart' && fullUrl && <ChartPreview url={fullUrl} titulo={artifact.titulo} />}
         {artifact.type === 'pdf' && fullUrl && (
           <iframe src={fullUrl} title={artifact.titulo} className="artifact-panel-iframe" />
         )}

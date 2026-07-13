@@ -200,7 +200,7 @@ def write_excel(df: pd.DataFrame, filepath: str, classif_col: str, justif_col: s
 
 def upload_to_azure(filepath: str, filename: str) -> str:
     if not AZURE_STORAGE_CONNECTION_STRING:
-        return f"/static/reports/{os.path.basename(filepath)}"
+        return f"/api/download/reports/{os.path.basename(filepath)}"
     try:
         from azure.storage.blob import BlobServiceClient, ContentSettings
         blob_name = f"generated/reports/{filename}"
@@ -217,7 +217,7 @@ def upload_to_azure(filepath: str, filename: str) -> str:
         return bc.url
     except Exception as e:
         print(f"[azure] Error subiendo: {e}", file=sys.stderr)
-        return f"/static/reports/{os.path.basename(filepath)}"
+        return f"/api/download/reports/{os.path.basename(filepath)}"
 
 # ── proceso principal ─────────────────────────────────────────────────────────
 

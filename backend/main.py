@@ -179,6 +179,18 @@ app.add_middleware(
 
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 os.makedirs(STATIC_DIR, exist_ok=True)
+
+# Gráficos y reportes contienen datos reales de la empresa (NPS, técnicos, eficiencia, etc.)
+# y solo deben servirse autenticados vía /api/download/{subfolder}/{filename} (ver más abajo).
+# Estas dos rutas se registran ANTES del mount público de /static para interceptar
+# cualquier acceso directo al viejo esquema de URL (Starlette resuelve rutas en el
+# orden en que se registran, y una ruta específica registrada antes de un Mount que
+# la superpone gana la coincidencia).
+@app.get("/static/charts/{filename}")
+@app.get("/static/reports/{filename}")
+async def blocked_public_artifact_access(filename: str):
+    raise HTTPException(status_code=404, detail="Not Found")
+
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 # ---------------------------------------------------------------------------
