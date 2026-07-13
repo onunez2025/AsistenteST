@@ -463,9 +463,9 @@ def obtener_adjuntos_ticket_c4c(ticket_id: str) -> str:
 
 @mcp.tool()
 def analizar_cambio_tipo_servicio_cas(
-    cas_nombre: str,
     tipo_servicio_final_like: str,
     tipo_servicio_inicial_like: str,
+    cas_nombre: str = "",
     fecha_inicio: str = "",
     fecha_fin: str = "",
 ) -> str:
@@ -478,21 +478,25 @@ def analizar_cambio_tipo_servicio_cas(
     - Tipo de servicio FINAL → FSM/SQL: campo 'Servicio' en ServiciosViewSQL.
     - Tipo de servicio INICIAL → SAP C4C OData: campo 'ServiceTermsServiceIssueName'.
 
-    Devuelve conteo por día y muestra de tickets afectados con técnico asignado.
+    Devuelve conteo por día (y por CAS, si se consultan todos) y muestra de tickets
+    afectados con técnico asignado.
 
     Args:
-        cas_nombre:                 Nombre o parte del CAS (ej. 'FAZZIO').
         tipo_servicio_final_like:   Patrón del tipo FINAL en FSM  (ej. 'VERIF' para VERIFICACIÓN).
         tipo_servicio_inicial_like: Patrón del tipo INICIAL en C4C (ej. 'INSTAL' para INSTALACIÓN).
+        cas_nombre: Nombre o parte del CAS (ej. 'FAZZIO'). Vacío (por defecto) = todos los CAS
+            combinados, con desglose de casos por CAS en el reporte.
         fecha_inicio: Fecha de visita inicio 'YYYY-MM-DD'. Vacío = sin límite inferior.
         fecha_fin:    Fecha de visita fin   'YYYY-MM-DD'. Vacío = sin límite superior.
     """
     if not SAP_BASE_URL or not SAP_USER or not SAP_PASSWORD:
         return "Error: credenciales SAP C4C no configuradas."
 
-    logger.info(f"[MCP TOOL] analizar_cambio_tipo_servicio_cas: cas={cas_nombre} final~{tipo_servicio_final_like} inicial~{tipo_servicio_inicial_like} {fecha_inicio}→{fecha_fin}")
+    logger.info(f"[MCP TOOL] analizar_cambio_tipo_servicio_cas: cas={cas_nombre or 'TODOS'} final~{tipo_servicio_final_like} inicial~{tipo_servicio_inicial_like} {fecha_inicio}→{fecha_fin}")
 
-    # ── PASO 1: SQL → tickets del CAS con tipo de servicio FINAL coincidente ──
+    cas_label = cas_nombre if cas_nombre else "todos los CAS"
+
+    # ── PASO 1: SQL → tickets (de un CAS, o de todos) con tipo de servicio FINAL coincidente ──
     import pyodbc
     SQL_SERVER_   = os.getenv("SQL_SERVER")
     SQL_DATABASE_ = os.getenv("SQL_DATABASE")
@@ -512,27 +516,28 @@ def analizar_cambio_tipo_servicio_cas(
         conn   = pyodbc.connect(conn_str)
         cursor = conn.cursor()
 
-        date_filter = ""
-        params = [f"%{cas_nombre}%", f"%{tipo_servicio_final_like}%"]
+        where_clauses = ["Servicio LIKE ?", "Ticket IS NOT NULL", "Ticket <> ''"]
+        params = [f"%{tipo_servicio_final_like}%"]
+        if cas_nombre:
+            where_clauses.insert(0, "CAS LIKE ?")
+            params.insert(0, f"%{cas_nombre}%")
         if fecha_inicio:
-            date_filter += " AND FechaVisita >= ?"
+            where_clauses.append("FechaVisita >= ?")
             params.append(fecha_inicio)
         if fecha_fin:
-            date_filter += " AND FechaVisita <= ?"
+            where_clauses.append("FechaVisita <= ?")
             params.append(fecha_fin)
+        where_sql = " AND ".join(where_clauses)
 
         sql = f"""
-            SELECT
+            SELECT TOP 500
                 Ticket,
+                CAS,
                 Servicio            AS ServicioFSM,
                 CAST(FechaVisita AS DATE) AS FechaVisita,
                 ISNULL(NombreTecnico,'') + ' ' + ISNULL(ApellidoTecnico,'') AS Tecnico
             FROM [APPGAC].[ServiciosViewSQL]
-            WHERE CAS LIKE ?
-              AND Servicio LIKE ?
-              AND Ticket IS NOT NULL
-              AND Ticket <> ''
-              {date_filter}
+            WHERE {where_sql}
             ORDER BY FechaVisita DESC
         """
         cursor.execute(sql, params)
@@ -543,12 +548,12 @@ def analizar_cambio_tipo_servicio_cas(
 
     if not rows:
         return (
-            f"No se encontraron tickets de '{cas_nombre}' con tipo de servicio FSM LIKE '%{tipo_servicio_final_like}%' "
+            f"No se encontraron tickets de {cas_label} con tipo de servicio FSM LIKE '%{tipo_servicio_final_like}%' "
             f"en el período indicado."
         )
 
     # ── PASO 2: C4C OData → tipo de servicio INICIAL por lotes de 30 ──
-    ticket_map = {str(r[0]).strip(): {"fsm": r[1], "fecha": str(r[2]), "tecnico": r[3].strip()} for r in rows}
+    ticket_map = {str(r[0]).strip(): {"cas": r[1], "fsm": r[2], "fecha": str(r[3]), "tecnico": r[4].strip()} for r in rows}
     ticket_ids = list(ticket_map.keys())
 
     headers = {"Content-Type": "application/json", "Accept": "application/json"}
@@ -581,6 +586,7 @@ def analizar_cambio_tipo_servicio_cas(
         if inicial_lower in tipo_inicial.lower():
             cambios.append({
                 "ticket":         tid,
+                "cas":            info["cas"],
                 "fecha":          info["fecha"],
                 "tipo_inicial":   tipo_inicial,
                 "tipo_final":     info["fsm"],
@@ -589,26 +595,37 @@ def analizar_cambio_tipo_servicio_cas(
 
     if not cambios:
         return (
-            f"No se encontraron tickets de '{cas_nombre}' que hayan cambiado de "
+            f"No se encontraron tickets de {cas_label} que hayan cambiado de "
             f"'{tipo_servicio_inicial_like}' (C4C) a '{tipo_servicio_final_like}' (FSM) "
             f"en el período indicado.\n"
             f"Tickets evaluados con tipo FSM coincidente: {len(ticket_ids)} | "
             f"Tipos C4C recuperados: {len(c4c_types)}"
         )
 
-    # ── PASO 4: agrupar por día ──
+    # ── PASO 4: agrupar por día (y por CAS, si se consultaron todos) ──
     por_dia: dict = {}
     for c in cambios:
         por_dia.setdefault(c["fecha"], []).append(c)
 
     lines = [
-        f"CAMBIOS DE TIPO DE SERVICIO — {cas_nombre.upper()}",
+        f"CAMBIOS DE TIPO DE SERVICIO — {cas_label.upper()}",
         f"  C4C (inicial) LIKE '%{tipo_servicio_inicial_like}%'  →  FSM (final) LIKE '%{tipo_servicio_final_like}%'",
         f"  Período: {fecha_inicio or 'inicio'} → {fecha_fin or 'hoy'}",
-        f"  Total casos detectados: {len(cambios)} de {len(ticket_ids)} tickets evaluados\n",
-        f"{'Fecha':<12} {'Casos':>5}   Tickets",
-        "─" * 70,
+        f"  Total casos detectados: {len(cambios)} de {len(ticket_ids)} tickets evaluados"
+        + (" (máx. 500 evaluados por consulta)" if len(ticket_ids) == 500 else "") + "\n",
     ]
+
+    if not cas_nombre:
+        por_cas: dict = {}
+        for c in cambios:
+            por_cas[c["cas"]] = por_cas.get(c["cas"], 0) + 1
+        lines.append("Casos por CAS:")
+        for cas, count in sorted(por_cas.items(), key=lambda x: -x[1]):
+            lines.append(f"  {cas:<45} {count:>5}")
+        lines.append("")
+
+    lines.append(f"{'Fecha':<12} {'Casos':>5}   Tickets")
+    lines.append("─" * 70)
     for fecha in sorted(por_dia.keys(), reverse=True):
         casos = por_dia[fecha]
         ids_str = ", ".join(c["ticket"] for c in casos[:8])
@@ -616,11 +633,11 @@ def analizar_cambio_tipo_servicio_cas(
         lines.append(f"{fecha:<12} {len(casos):>5}   {ids_str}{sufijo}")
 
     lines.append("\nDetalle de casos (primeros 20):")
-    lines.append(f"{'Ticket':<10} {'Fecha':<12} {'Tipo C4C (inicial)':<35} {'Tipo FSM (final)':<30} Técnico")
-    lines.append("─" * 110)
+    lines.append(f"{'Ticket':<10} {'CAS':<30} {'Fecha':<12} {'Tipo C4C (inicial)':<30} {'Tipo FSM (final)':<25} Técnico")
+    lines.append("─" * 130)
     for c in cambios[:20]:
         lines.append(
-            f"{c['ticket']:<10} {c['fecha']:<12} {c['tipo_inicial'][:34]:<35} {c['tipo_final'][:29]:<30} {c['tecnico']}"
+            f"{c['ticket']:<10} {c['cas'][:29]:<30} {c['fecha']:<12} {c['tipo_inicial'][:29]:<30} {c['tipo_final'][:24]:<25} {c['tecnico']}"
         )
     if len(cambios) > 20:
         lines.append(f"... y {len(cambios) - 20} caso(s) más.")
