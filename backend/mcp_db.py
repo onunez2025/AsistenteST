@@ -290,8 +290,13 @@ def generar_grafico(sql_query: str, tipo_grafico: str, columna_x: str, columna_y
         filename = f"chart_{safe_title}_{timestamp}.html"
         filepath = os.path.join(CHARTS_DIR, filename)
         
-        plotlyjs_src = PLOTLY_JS_URL if os.path.exists(PLOTLY_JS_PATH) else "cdn"
-        fig.write_html(filepath, include_plotlyjs=plotlyjs_src, full_html=True)
+        # include_plotlyjs=True incrusta el JS de Plotly directamente en el HTML
+        # (self-contained). Necesario porque el panel de artefactos carga el gráfico
+        # dentro de un iframe vía blob URL (para poder mandar el header de
+        # autenticación) — un <script src="/static/js/..."> externo no se resuelve
+        # de forma confiable dentro de un documento blob:, así que referenciar el
+        # Plotly self-hosted por URL ya no funciona ahí.
+        fig.write_html(filepath, include_plotlyjs=True, full_html=True)
 
         url = f"/api/download/charts/{filename}"
         return f"Gráfico interactivo generado con éxito. [EmbedChart:{url}]"
