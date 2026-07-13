@@ -987,11 +987,20 @@ async def stream_chat_response(history_messages: List[ChatMessage], latest_messa
 
             # Para iteraciones con tool calls usamos stream=False para procesar rápido
             # Solo la respuesta final (sin tool calls) se hace con stream=True
+            #
+            # thinking desactivado: DeepSeek V4 razona por defecto, y cuando el modelo
+            # hace una tool call, la API exige que el reasoning_content de ese turno se
+            # devuelva tal cual en los siguientes turnos de la conversación. No lo
+            # guardamos (solo persistimos el texto final del mensaje), así que cualquier
+            # conversación con más de un turno después de una tool call fallaba con
+            # HTTP 400 ("The reasoning_content in the thinking mode must be passed back
+            # to the API"). Desactivar thinking evita que la API genere ese campo.
             response = await client.chat.completions.create(
                 model="deepseek-v4-pro",
                 messages=messages,
                 temperature=0.1,
                 max_tokens=8192,
+                extra_body={"thinking": {"type": "disabled"}},
                 **kwargs
             )
 
