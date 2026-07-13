@@ -6,6 +6,7 @@ from requests.auth import HTTPBasicAuth
 from dotenv import load_dotenv
 from fastmcp import FastMCP
 from azure.storage.blob import BlobServiceClient, ContentSettings
+from typing import List, Dict, Any, Optional
 
 # Setup logging to stderr because stdout is used for MCP stdio protocol communication
 logging.basicConfig(
@@ -33,6 +34,47 @@ SAP_PASSWORD = os.getenv("SAP_PASSWORD")
 
 AZURE_STORAGE_CONNECTION_STRING = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
 AZURE_STORAGE_CONTAINER         = os.getenv("AZURE_STORAGE_CONTAINER", "stecnico")
+
+# Diccionario cerrado de campos permitidos como filtro en buscar_tickets_c4c.
+# campo (nombre natural que usa la IA) -> (propiedad OData real, tipo de coincidencia)
+_ALLOWED_SEARCH_FIELDS = {
+    "estado":               ("ServiceRequestLifeCycleStatusCodeText", "exact"),
+    "cliente":               ("BuyerPartyName", "substring"),
+    "producto":              ("ProductDescription", "substring"),
+    "producto_registrado":   ("InstallationPointID", "exact"),
+    "tipo_servicio":         ("ServiceTermsServiceIssueName", "substring"),
+    "prioridad":             ("ServicePriorityCodeText", "exact"),
+    "empresa":               ("zIDEmpresa_SDK", "exact"),
+}
+
+
+def _escape_odata_value(value: str) -> str:
+    """Escapa comillas simples para uso seguro dentro de un literal string de OData."""
+    return value.replace("'", "''")
+
+
+def _build_odata_filter_from_filtros(filtros):
+    """Convierte una lista de {"campo": ..., "valor": ...} en un fragmento de filtro
+    OData, validando cada campo contra _ALLOWED_SEARCH_FIELDS.
+
+    Devuelve (filtro_str, error). Si error no es None, filtro_str es "".
+    """
+    if not filtros:
+        return "", None
+    partes = []
+    for f in filtros:
+        campo = f.get("campo", "")
+        valor = f.get("valor", "")
+        if campo not in _ALLOWED_SEARCH_FIELDS:
+            disponibles = ", ".join(sorted(_ALLOWED_SEARCH_FIELDS.keys()))
+            return "", f"Campo de filtro '{campo}' no permitido. Campos disponibles: {disponibles}."
+        propiedad, tipo = _ALLOWED_SEARCH_FIELDS[campo]
+        valor_escapado = _escape_odata_value(str(valor))
+        if tipo == "substring":
+            partes.append(f"substringof('{valor_escapado}', {propiedad})")
+        else:
+            partes.append(f"{propiedad} eq '{valor_escapado}'")
+    return " and ".join(partes), None
 
 # Initialize FastMCP Server
 mcp = FastMCP("SAP C4C Server")
