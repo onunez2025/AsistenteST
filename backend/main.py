@@ -801,7 +801,7 @@ Identifica la fuente ANTES de consultar. Aplica la primera regla que coincida.
 4. CONSULTAS MASIVAS (>3 meses, múltiples variables): Llama directamente a 'generar_reporte_excel' con columnas esenciales.
 4b. CLASIFICACIÓN SEMÁNTICA DE TICKETS: Cuando el usuario pida clasificar tickets leyendo y entendiendo el comentario del técnico (ej: "cuáles tienen fuga de gas real", "donde el cliente no estaba", "donde el equipo fue cambiado"), usa 'iniciar_analisis_masivo'. Este proceso corre en background sin límite de filas. Tras lanzarlo, informa al usuario el job_id y dile que puede preguntar el avance cuando quiera. Cuando el usuario pregunte por el progreso, usa 'verificar_estado_analisis'.
 4c. CONFIRMAR ALCANCE ANTES DE OPERACIONES COSTOSAS: Usa 'preguntar_usuario' (con 2-4 opciones concretas) ANTES de: (a) lanzar 'iniciar_analisis_masivo' si el volumen es grande o incierto — ejecuta primero un SELECT COUNT(*) liviano con los mismos filtros; menos de ~2,000 filas, procede directo sin preguntar; más que eso, pregunta indicando el número real y el tiempo estimado, ofreciendo acotar por CAS, técnico o rango de fechas; (b) exportar una encuesta completa de Qualtrics sin ticket ni fecha específicos; (c) ejecutar una consulta SQL claramente amplia y sin acotar (ej. "todos los tickets abiertos" sin ningún filtro). Máximo una pregunta por turno. NUNCA repitas una pregunta ya respondida en esta conversación. Si el usuario ya dio alcance suficiente (fechas, CAS, técnico), NO preguntes — procede directo. Esta herramienta es solo para estos tres casos, no para dudas triviales ni ambigüedad general.
-5. GRÁFICOS: Usa 'generar_grafico' e incluye la etiqueta [EmbedChart:URL] sin modificarla.
+5. GRÁFICOS: Usa 'generar_grafico' e incluye la etiqueta [EmbedChart:URL] sin modificarla. NUNCA escribas [EmbedChart:...], [EmbedPDF:...] ni [Descargar Reporte Excel](...) con una URL inventada — solo copia exactamente la URL que la herramienta te devolvió en este mismo turno. Si no llamaste a la herramienta correspondiente, no incluyas esa etiqueta.
 5b. INFORME TÉCNICO PDF: Cuando 'obtener_adjuntos_ticket_c4c' devuelva [EmbedPDF:URL], inclúyela tal cual en tu respuesta sin modificarla. El frontend la renderizará como visor PDF embebido. Tipos disponibles: 'bar' (barras verticales), 'bar_h' (barras horizontales — ideal para rankings), 'line' (línea), 'pie' (torta), 'scatter' (dispersión), 'funnel' (embudo), 'histogram' (histograma).
 6. RESPUESTAS: En español, profesional, analítico. Usa tablas Markdown cuando aporten claridad.
 7. ADJUNTOS: El backend ya procesó el archivo adjunto y te envió su contenido al final del mensaje. Úsalo directamente.
@@ -877,6 +877,22 @@ async def stream_chat_response(history_messages: List[ChatMessage], latest_messa
     def sse(data: dict) -> str:
         return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
 
+    def strip_unverified_artifact_links(text: str, valid_urls: set) -> str:
+        # El modelo a veces escribe [EmbedChart:...], [EmbedPDF:...] o
+        # [Descargar Reporte Excel](...) sin haber llamado realmente a la
+        # herramienta correspondiente en este turno (alucinación de URL, más
+        # frecuente tras muchas tool calls seguidas). Esas URLs nunca existieron
+        # en el servidor y darían 404 en el panel de artefactos, así que se
+        # eliminan aquí si no coinciden con una URL real devuelta por una
+        # herramienta durante esta respuesta.
+        def _check(m):
+            return m.group(0) if m.group(1) in valid_urls else ""
+
+        text = re.sub(r"\[EmbedChart:([^\]]+)\]", _check, text)
+        text = re.sub(r"\[EmbedPDF:([^\]]+)\]", _check, text)
+        text = re.sub(r"\[Descargar Reporte Excel\]\(([^)]+)\)", _check, text)
+        return text
+
     def emit_usage(hit, miss, comp):
         # Tarifas de deepseek-v4-pro (jul 2026): cache hit $0.003625/M, cache miss $0.435/M, output $0.87/M
         cost = (hit * 0.003625 + miss * 0.435 + comp * 0.87) / 1_000_000
@@ -921,6 +937,7 @@ async def stream_chat_response(history_messages: List[ChatMessage], latest_messa
         acc_cache_hit  = 0
         acc_cache_miss = 0
         acc_completion = 0
+        valid_artifact_urls: set = set()
 
         for iteration in range(max_iters):
             # En la iteración final de seguridad, no permitir más tool calls
@@ -967,6 +984,7 @@ async def stream_chat_response(history_messages: List[ChatMessage], latest_messa
             if not tool_calls:
                 if content_txt:
                     clean = remove_dsml_blocks(content_txt)
+                    clean = strip_unverified_artifact_links(clean, valid_artifact_urls)
                     if clean:
                         yield sse({"type": "status", "message": "Redactando respuesta..."})
                         chunk_size = 20
@@ -1017,6 +1035,10 @@ async def stream_chat_response(history_messages: List[ChatMessage], latest_messa
                 # Si fue un error de SQL, agregar pista para que el modelo corrija y reintente
                 if fn_name == "ejecutar_consulta_sql" and (result.startswith("Error") or "Error al ejecutar" in result):
                     result += "\n\n⚠️ Analiza el error, corrige el SQL y ejecuta una nueva consulta con el problema resuelto. No le reportes este error al usuario todavía."
+
+                valid_artifact_urls.update(re.findall(r"\[EmbedChart:([^\]]+)\]", result))
+                valid_artifact_urls.update(re.findall(r"\[EmbedPDF:([^\]]+)\]", result))
+                valid_artifact_urls.update(re.findall(r"\[Descargar Reporte Excel\]\(([^)]+)\)", result))
 
                 yield sse({"type": "tool_end", "tool": fn_name})
                 logger.info(f"[STREAM] Tool result (truncated): {result[:100]}")
