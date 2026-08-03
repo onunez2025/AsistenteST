@@ -85,6 +85,12 @@ if DEEPSEEK_API_KEY:
 else:
     logger.warning("DEEPSEEK_API_KEY no encontrada.")
 
+# Motor del chat principal: por defecto DeepSeek, pero permite apuntar a un servidor
+# OpenAI-compatible propio (ej. Ollama) para pruebas sin tocar código.
+CHAT_API_BASE_URL = os.getenv("CHAT_API_BASE_URL", "https://api.deepseek.com")
+CHAT_API_KEY      = os.getenv("CHAT_API_KEY", DEEPSEEK_API_KEY or "ollama")
+CHAT_API_MODEL    = os.getenv("CHAT_API_MODEL", "deepseek-v4-pro")
+
 # Caché de esquemas (se llena en el lifespan/startup)
 DB_SCHEMA_CACHE: str = ""
 
@@ -954,7 +960,7 @@ async def stream_chat_response(history_messages: List[ChatMessage], latest_messa
         yield sse({"type": "status", "message": "Analizando tu consulta..."})
 
         prompt_sistema = build_system_prompt(fecha_actual, hora_actual)
-        client         = AsyncOpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
+        client         = AsyncOpenAI(api_key=CHAT_API_KEY, base_url=CHAT_API_BASE_URL)
 
         messages = [{"role": "system", "content": prompt_sistema}]
         for msg in history_messages:
@@ -997,7 +1003,7 @@ async def stream_chat_response(history_messages: List[ChatMessage], latest_messa
             # HTTP 400 ("The reasoning_content in the thinking mode must be passed back
             # to the API"). Desactivar thinking evita que la API genere ese campo.
             response = await client.chat.completions.create(
-                model="deepseek-v4-pro",
+                model=CHAT_API_MODEL,
                 messages=messages,
                 temperature=0.1,
                 max_tokens=8192,
